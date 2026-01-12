@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/joho/godotenv"
 	"github.com/infinity-decoder/cortex-backend/internal/persistence"
 	"github.com/infinity-decoder/cortex-backend/internal/scanner"
 	"github.com/infinity-decoder/cortex-backend/internal/scheduler"
@@ -17,6 +18,9 @@ import (
 )
 
 func main() {
+	// Load environment variables from .env if it exists
+	godotenv.Load("../.env")
+
 	// Initialize Database
 	database, err := db.Connect()
 	if err != nil {
