@@ -18,12 +18,15 @@ if ($is_installed && !isset($_GET['reinstall'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cortex | Setup Wizard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
             --bg: #0f172a;
             --accent: #3b82f6;
             --card: #1e293b;
             --text: #f8fafc;
+            --error: #ef4444;
+            --success: #10b981;
         }
         body {
             background: var(--bg);
@@ -43,6 +46,7 @@ if ($is_installed && !isset($_GET['reinstall'])) {
             width: 100%;
             max-width: 500px;
             border: 1px solid rgba(255,255,255,0.05);
+            transition: transform 0.3s ease;
         }
         .header {
             text-align: center;
@@ -63,6 +67,11 @@ if ($is_installed && !isset($_GET['reinstall'])) {
         }
         .step.active {
             display: block;
+            animation: fadeIn 0.4s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .input-group {
             margin-bottom: 1.25rem;
@@ -83,11 +92,12 @@ if ($is_installed && !isset($_GET['reinstall'])) {
             border-radius: 0.5rem;
             font-size: 0.875rem;
             box-sizing: border-box;
+            transition: all 0.2s;
         }
         input:focus {
             outline: none;
             border-color: var(--accent);
-            ring: 2px solid var(--accent);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
         }
         .btn {
             background: var(--accent);
@@ -100,10 +110,18 @@ if ($is_installed && !isset($_GET['reinstall'])) {
             cursor: pointer;
             transition: all 0.2s;
             margin-top: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
         }
-        .btn:hover {
+        .btn:hover:not(:disabled) {
             filter: brightness(1.1);
             transform: translateY(-1px);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         .secondary-btn {
             background: transparent;
@@ -112,27 +130,27 @@ if ($is_installed && !isset($_GET['reinstall'])) {
             font-size: 0.75rem;
             border: 1px solid #334155;
         }
-        .loader {
-            display: none;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid var(--accent);
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-            margin: 10px auto;
+        .swal2-popup {
+            background: var(--card) !important;
+            color: var(--text) !important;
+            border-radius: 1rem !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
         }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .hint {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="installerContainer">
         <div class="header">
             <img src="https://raw.githubusercontent.com/infinity-decoder/Cortex/master/frontend/public/cortex_SaaS.png" alt="Logo">
             <h1>Cortex Setup Wizard</h1>
         </div>
 
-        <form id="setupForm" action="process.php" method="POST">
+        <form id="setupForm">
             <!-- Step 1: Database -->
             <div id="step1" class="step active">
                 <h3>Database Configuration</h3>
@@ -146,17 +164,20 @@ if ($is_installed && !isset($_GET['reinstall'])) {
                 </div>
                 <div class="input-group">
                     <label>Database User</label>
-                    <input type="text" name="db_user" placeholder="postgres" required>
+                    <input type="text" name="db_user" placeholder="postgres" value="postgres" required>
+                    <div class="hint">Recommended: Use 'postgres' or a user with CREATEDB privileges.</div>
                 </div>
                 <div class="input-group">
                     <label>Database Password</label>
                     <input type="password" name="db_pass" placeholder="********">
+                    <div class="hint">Laragon default is often empty.</div>
                 </div>
                 <div class="input-group">
                     <label>Database Name</label>
                     <input type="text" name="db_name" value="cortex" required>
+                    <div class="hint">Installer will attempt to create this database.</div>
                 </div>
-                <button type="button" class="btn" onclick="nextStep(2)">Configure Application</button>
+                <button type="button" class="btn" onclick="nextStep(2)">Configure Account &rarr;</button>
             </div>
 
             <!-- Step 2: App Config -->
@@ -168,13 +189,11 @@ if ($is_installed && !isset($_GET['reinstall'])) {
                 </div>
                 <div class="input-group">
                     <label>Organization Name</label>
-                    <input type="text" name="org_name" value="Default Org" required>
+                    <input type="text" name="org_name" value="My Organization" required>
                 </div>
-                <button type="submit" class="btn">Finish Installation</button>
+                <button type="submit" class="btn" id="submitBtn">Install Cortex</button>
                 <button type="button" class="btn secondary-btn" onclick="nextStep(1)">Back</button>
             </div>
-            
-            <div id="loading" class="loader"></div>
         </form>
     </div>
 
@@ -184,9 +203,53 @@ if ($is_installed && !isset($_GET['reinstall'])) {
             document.getElementById('step' + step).classList.add('active');
         }
 
-        document.getElementById('setupForm').onsubmit = function() {
-            document.getElementById('loading').style.display = 'block';
-            document.querySelector('.btn').disabled = true;
+        document.getElementById('setupForm').onsubmit = async function(e) {
+            e.preventDefault();
+            
+            const btn = document.getElementById('submitBtn');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'Installing...';
+
+            const formData = new FormData(this);
+
+            try {
+                const response = await fetch('process.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Installation Successful!',
+                        text: result.message,
+                        confirmButtonText: 'Launch Portal',
+                        confirmButtonColor: '#3b82f6'
+                    }).then(() => {
+                        window.location.href = '/';
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Installation Failed',
+                        text: result.message,
+                        confirmButtonColor: '#ef4444'
+                    });
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'System Error',
+                    text: 'An unexpected error occurred during installation.',
+                    footer: error.message
+                });
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
         };
     </script>
 </body>

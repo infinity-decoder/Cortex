@@ -1,58 +1,67 @@
 <?php
 /**
- * Cortex Installation Processor
+ * Cortex Installation Processor (AJAX Version)
  */
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: index.php');
+header('Content-Type: application/json');
+
+function sendResponse($success, $message, $data = []) {
+    echo json_encode(['success' => $success, 'message' => $message, 'data' => $data]);
     exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    sendResponse(false, 'Invalid request method.');
 }
 
 // 0. Sanitize Inputs
 $db_host = filter_input(INPUT_POST, 'db_host', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-$db_port = filter_input(INPUT_POST, 'db_port', FILTER_SANITIZE_NUMBER_INT);
+$db_port = filter_input(INPUT_POST, 'db_port', FILTER_SANITIZE_NUMBER_INT) ?: 5432;
 $db_user = filter_input(INPUT_POST, 'db_user', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-$db_pass = $_POST['db_pass']; // Passwords shouldn't be HTML sanitized
+$db_pass = $_POST['db_pass']; 
 $db_name = filter_input(INPUT_POST, 'db_name', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 $admin_email = filter_input(INPUT_POST, 'admin_email', FILTER_SANITIZE_EMAIL);
 $org_name = filter_input(INPUT_POST, 'org_name', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 
-// Validation
-if (!$admin_email || !filter_var($admin_email, FILTER_VALIDATE_EMAIL)) {
-    die("Invalid admin email address.");
-}
-
-// 1. Test PDO Connection (Corrected constant from ATTR_ERR_CODE to ATTR_ERRMODE)
+// 1. Test Connection & Create Database
 try {
+    // Connect to 'postgres' system database first to create the target database
     $dsn = "pgsql:host=$db_host;port=$db_port;dbname=postgres";
     $pdo = new PDO($dsn, $db_user, $db_pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 
-    // Create DB if not exists
-    $pdo->exec("CREATE DATABASE $db_name");
-} catch (PDOException $e) {
-    if (strpos($e->getMessage(), 'already exists') === false) {
-        die("Database connection failed: " . $e->getMessage());
+    // Check if database exists
+    $stmt = $pdo->prepare("SELECT 1 FROM pg_database WHERE datname = ?");
+    $stmt->execute([$db_name]);
+    if (!$stmt->fetch()) {
+        $pdo->exec("CREATE DATABASE $db_name");
     }
+} catch (PDOException $e) {
+    sendResponse(false, 'Database Connection Failed: ' . $e->getMessage());
 }
 
-// 2. Run Migrations
+// 2. Run Migrations on the new database
 try {
     $dsn = "pgsql:host=$db_host;port=$db_port;dbname=$db_name";
     $pdo = new PDO($dsn, $db_user, $db_pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 
-    $sql = file_get_contents('../backend/schema.sql');
+    $schema_path = __DIR__ . '/../backend/schema.sql';
+    if (!file_exists($schema_path)) {
+        sendResponse(false, 'Migration failed: schema.sql not found at ' . $schema_path);
+    }
+    
+    $sql = file_get_contents($schema_path);
     $pdo->exec($sql);
 
-    // Initial Org & Domain
+    // Initial Org
     $org_id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x', mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(16384, 20479), mt_rand(32768, 49151), mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(0, 65535));
     $pdo->prepare("INSERT INTO organizations (id, name, plan_tier) VALUES (?, ?, 'free')")->execute([$org_id, $org_name]);
     
-    // Admin User Placeholder (Password: admin123)
+    // Admin User (Password: admin123)
     $user_id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x', mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(16384, 20479), mt_rand(32768, 49151), mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(0, 65535));
     $pdo->prepare("INSERT INTO users (id, email, password_hash) VALUES (?, ?, '$2a$10$7E1gPFF1z6Y9f6Y9f6Y9f6Y9f6Y9f6Y9f6Y9f6Y9f6Y9f6')")->execute([$user_id, $admin_email]);
 
 } catch (PDOException $e) {
-    die("Migration failed: " . $e->getMessage());
+    sendResponse(false, 'Migration failed: ' . $e->getMessage());
 }
 
 // 3. Write .env File
@@ -60,30 +69,8 @@ $env_content = "DATABASE_URL=postgres://$db_user:$db_pass@$db_host:$db_port/$db_
 $env_content .= "PORT=8080\n";
 $env_content .= "NODE_ENV=production\n";
 
-file_put_contents('../.env', $env_content);
+if (@file_put_contents(__DIR__ . '/../.env', $env_content) === false) {
+    sendResponse(false, 'Installation succeeded but failed to write .env file. Please check folder permissions.');
+}
 
-// 4. Success Page
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Cortex | Installation Successful</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        body { background: #0f172a; color: white; font-family: 'Inter', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
-        .card { background: #1e293b; padding: 3rem; border-radius: 1rem; border: 1px solid #334155; max-width: 400px; }
-        h2 { color: #10b981; }
-        p { color: #94a3b8; line-height: 1.6; }
-        .btn { display: inline-block; background: #3b82f6; color: white; text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; margin-top: 1.5rem; }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h2>Installation Successful!</h2>
-        <p>Cortex has been configured and is ready to secure your attack surface.</p>
-        <p><strong>Next Steps:</strong><br/>1. Start the Go Backend (bin/api.exe)<br/>2. Start the Frontend (npm run dev)</p>
-        <a href="/" class="btn">Launch Portal</a>
-    </div>
-</body>
-</html>
+sendResponse(true, 'Cortex has been successfully installed and configured.');
