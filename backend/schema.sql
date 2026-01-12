@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS domains (
     root_domain TEXT NOT NULL,
     verified BOOLEAN DEFAULT false NOT NULL,
     verification_token TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(org_id, root_domain)
 );
 
 -- Assets (Subdomains/IPs)

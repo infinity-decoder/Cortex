@@ -68,32 +68,46 @@ export default function Home() {
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold mb-3 text-slate-300">Risk Findings ({results.findings?.length || 0})</h3>
+              <div className="flex justify-between items-end mb-3">
+                <h3 className="text-lg font-semibold text-slate-300">Risk Findings ({results.all_findings?.length || 0})</h3>
+                {results.new_findings?.length > 0 && (
+                  <span className="text-xs bg-red-600/20 text-red-500 border border-red-600/50 px-2 py-0.5 rounded-full animate-pulse">
+                    {results.new_findings.length} NEW FINDINGS
+                  </span>
+                )}
+              </div>
               <div className="space-y-4">
-                {results.findings?.map((finding: any, i: number) => (
-                  <div key={i} className={`p-4 rounded-lg border flex flex-col gap-2 ${
-                    finding.severity === 'critical' ? 'bg-red-900/20 border-red-900/50' :
-                    finding.severity === 'high' ? 'bg-orange-900/20 border-orange-900/50' : 
-                    'bg-slate-800 border-slate-700'
-                  }`}>
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-lg uppercase">{finding.type}</span>
-                      <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${
-                        finding.severity === 'critical' ? 'bg-red-600' :
-                        finding.severity === 'high' ? 'bg-orange-600' : 'bg-slate-600'
+                {results.all_findings?.map((finding: any, i: number) => {
+                  const isNew = results.new_findings?.some((nf: any) => nf.type === finding.type && nf.severity === finding.severity);
+                  return (
+                    <div key={i} className={`p-4 rounded-lg border flex flex-col gap-2 relative transition-all hover:scale-[1.01] ${finding.severity === 'critical' ? 'bg-red-900/20 border-red-900/50' :
+                        finding.severity === 'high' ? 'bg-orange-900/20 border-orange-900/50' :
+                          'bg-slate-800 border-slate-700'
                       }`}>
-                        {finding.severity}
-                      </span>
+                      {isNew && (
+                        <div className="absolute -top-2 -right-2 bg-red-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-lg animate-bounce">
+                          NEW
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-lg uppercase tracking-tight">{finding.type}</span>
+                        <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${finding.severity === 'critical' ? 'bg-red-600' :
+                            finding.severity === 'high' ? 'bg-orange-600' : 'bg-slate-600'
+                          }`}>
+                          {finding.severity}
+                        </span>
+                      </div>
+                      <p className="text-slate-300 text-sm leading-relaxed">{finding.description}</p>
+                      <div className="mt-2 p-2 bg-slate-900/50 rounded text-xs">
+                        <span className="text-slate-500 font-bold mr-2">REMEDIATION:</span>
+                        <span className="text-slate-300">{finding.remediation}</span>
+                      </div>
                     </div>
-                    <p className="text-slate-300">{finding.description}</p>
-                    <div className="mt-2 text-sm">
-                      <span className="text-slate-500 font-bold">REMEDIATION:</span> {finding.remediation}
-                    </div>
-                  </div>
-                ))}
-                {(!results.findings || results.findings.length === 0) && (
-                  <div className="text-slate-500 italic p-4 bg-slate-800/50 rounded-lg text-center">
-                    No critical exposures detected.
+                  );
+                })}
+                {(!results.all_findings || results.all_findings.length === 0) && (
+                  <div className="text-slate-500 italic p-8 bg-slate-800/30 border border-dashed border-slate-700 rounded-xl text-center">
+                    No critical exposures detected. Scan complete.
                   </div>
                 )}
               </div>

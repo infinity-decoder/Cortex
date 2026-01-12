@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/infinity-decoder/cortex-backend/internal/persistence"
+	"github.com/infinity-decoder/cortex-backend/internal/scheduler"
 	"github.com/infinity-decoder/cortex-backend/pkg/db"
 )
 
@@ -19,6 +22,16 @@ func main() {
 		log.Fatalf("Could not connect to database: %v", err)
 	}
 	defer database.Close()
+
+	// Initialize Dependencies
+	repo := persistence.NewRepository(database)
+	srv := &Server{Repo: repo}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Initialize & Start Scheduler
+	schedule := scheduler.NewScheduler(repo, 24*time.Hour)
+	go schedule.Start(ctx)
 
 	r := chi.NewRouter()
 
@@ -48,7 +61,7 @@ func main() {
 			w.Write([]byte("Cortex API v1"))
 		})
 		
-		r.Post("/scan", handleScan)
+		r.Post("/scan", srv.handleScan)
 	})
 
 	port := 8080
