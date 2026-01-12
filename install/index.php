@@ -229,7 +229,7 @@ if ($is_installed && !isset($_GET['reinstall'])) {
                         confirmButtonText: 'Launch Portal',
                         confirmButtonColor: '#3b82f6'
                     }).then(() => {
-                        window.location.href = '/';
+                        window.location.href = '../';
                     });
                 } else {
                     Swal.fire({
