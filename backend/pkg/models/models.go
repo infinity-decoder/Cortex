@@ -63,3 +63,13 @@ type ScanRun struct {
 	StartedAt  time.Time  `json:"started_at" db:"started_at"`
 	FinishedAt *time.Time `json:"finished_at,omitempty" db:"finished_at"`
 }
+
+type AuditLog struct {
+	ID        uuid.UUID  `json:"id"`
+	UserID    *uuid.UUID `json:"user_id"`
+	OrgID     *uuid.UUID `json:"org_id"`
+	Action    string     `json:"action"`
+	Metadata  string     `json:"metadata"` // JSON string
+	IPAddress string     `json:"ip_address"`
+	CreatedAt time.Time  `json:"created_at"`
+}

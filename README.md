@@ -3,10 +3,16 @@
 # 👨‍💻Author: INFINITY DECODER
 
 <p align="center">
-  <img src="https://infinitydecoder.net/wp-content/uploads/2023/11/Infinity-Decoder-Logo-2.png" alt="Logo" width="200">
-  <h3 align="center">Cortex</h3>
+  <a href="https://github.com/infinity-decoder/Cortex">
+    <img src="https://raw.githubusercontent.com/infinity-decoder/Cortex/master/frontend/public/cortex_SaaS.png" alt="Cortex Logo" width="120" height="120">
+  </a>
+  <h1 align="center">Cortex</h1>
   <p align="center">
     <strong>Container-Aware Attack Surface Monitoring SaaS for SMBs</strong>
+    <br />
+    <a href="https://github.com/infinity-decoder/Cortex/issues">Report Bug</a>
+    ·
+    <a href="https://github.com/infinity-decoder/Cortex/issues">Request Feature</a>
     <br />
     <a href="https://infinitydecoder.net"><strong>Visit Website »</strong></a>
     <br />
@@ -17,7 +23,6 @@
     ·
     <a href="#tech-stack">Tech Stack</a>
   </p>
-</p>
 
 ---
 

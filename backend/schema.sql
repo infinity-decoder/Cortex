@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS organizations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
-    plan_tier TEXT DEFAULT 'free' NOT NULL,
+    plan_tier TEXT DEFAULT 'free',
+    daily_scan_limit INTEGER DEFAULT 5, -- Quota management
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -76,7 +77,18 @@ CREATE TABLE IF NOT EXISTS findings (
 CREATE TABLE IF NOT EXISTS scan_runs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     domain_id UUID REFERENCES domains(id) ON DELETE CASCADE,
-    status TEXT DEFAULT 'pending' NOT NULL,
+    status TEXT NOT NULL,
     started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     finished_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Audit Logs for Legal Compliance
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID,
+    org_id UUID,
+    action TEXT NOT NULL,
+    metadata JSONB,
+    ip_address TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
