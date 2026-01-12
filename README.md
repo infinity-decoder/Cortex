@@ -68,7 +68,7 @@ Cortex is designed to be **External (no agents)**, **Continuous (scheduled scans
 - Node.js 22+
 - PostgreSQL
 
-### Installation
+### Installation (Manual)
 
 1. **Backend Setup**
    ```bash
@@ -83,6 +83,12 @@ Cortex is designed to be **External (no agents)**, **Continuous (scheduled scans
    npm install
    npm run dev
    ```
+
+### Quick Deployment (Web Installer)
+Cortex includes a Shiori-style web installer for fast VPS setup:
+1. Clone the repository to your web root.
+2. Visit `http://your-domain.com/install` in your browser.
+3. Follow the Setup Wizard to configure your database and environment.
 
 ## ⚖️ Legal & Safety
 Cortex is built for ethical security monitoring.
