@@ -25,6 +25,7 @@ type Domain struct {
 	RootDomain        string    `json:"root_domain" db:"root_domain"`
 	Verified          bool      `json:"verified" db:"verified"`
 	VerificationToken string    `json:"verification_token" db:"verification_token"`
+	CreatedAt         time.Time `json:"created_at" db:"created_at"`
 }
 
 type Asset struct {

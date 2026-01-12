@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/infinity-decoder/cortex-backend/internal/persistence"
+	"github.com/infinity-decoder/cortex-backend/internal/scanner"
 	"github.com/infinity-decoder/cortex-backend/internal/scheduler"
 	"github.com/infinity-decoder/cortex-backend/pkg/db"
 )
@@ -25,12 +26,13 @@ func main() {
 
 	// Initialize Dependencies
 	repo := persistence.NewRepository(database)
-	srv := &Server{Repo: repo}
+	orch := scanner.NewOrchestrator(repo)
+	srv := &Server{Repo: repo, Orchestrator: orch}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Initialize & Start Scheduler
-	schedule := scheduler.NewScheduler(repo, 24*time.Hour)
+	schedule := scheduler.NewScheduler(repo, orch, 24*time.Hour)
 	go schedule.Start(ctx)
 
 	r := chi.NewRouter()
@@ -62,6 +64,8 @@ func main() {
 		})
 		
 		r.Post("/scan", srv.handleScan)
+		r.Post("/domains/verify", srv.handleVerify)
+		r.Get("/stats", srv.handleStats)
 	})
 
 	port := 8080

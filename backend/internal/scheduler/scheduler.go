@@ -6,17 +6,21 @@ import (
 	"time"
 
 	"github.com/infinity-decoder/cortex-backend/internal/persistence"
+	"github.com/infinity-decoder/cortex-backend/internal/scanner"
+	"github.com/infinity-decoder/cortex-backend/pkg/models"
 )
 
 type Scheduler struct {
-	Repo     *persistence.Repository
-	Interval time.Duration
+	Repo         *persistence.Repository
+	Orchestrator *scanner.Orchestrator
+	Interval     time.Duration
 }
 
-func NewScheduler(repo *persistence.Repository, interval time.Duration) *Scheduler {
+func NewScheduler(repo *persistence.Repository, orch *scanner.Orchestrator, interval time.Duration) *Scheduler {
 	return &Scheduler{
-		Repo:     repo,
-		Interval: interval,
+		Repo:         repo,
+		Orchestrator: orch,
+		Interval:     interval,
 	}
 }
 
@@ -26,6 +30,9 @@ func (s *Scheduler) Start(ctx context.Context) {
 	defer ticker.Stop()
 
 	log.Printf("Scheduler started with interval: %v", s.Interval)
+
+	// Run initial check immediately
+	s.runPendingScans(ctx)
 
 	for {
 		select {
@@ -38,16 +45,23 @@ func (s *Scheduler) Start(ctx context.Context) {
 }
 
 func (s *Scheduler) runPendingScans(ctx context.Context) {
-	// For Phase 2, we'll fetch all verified domains and check if they need a scan
-	// In a real SaaS, this would check the plan tier and last scan time
-	// For now, we'll just log and placeholder the logic
-	log.Println("Checking for pending scans...")
+	log.Println("Checking for pending scans for verified domains...")
 	
-	// Example logic:
-	// domains, _ := s.Repo.GetVerifiedDomains(ctx)
-	// for _, d := range domains {
-	//    if s.needsScan(d) {
-	//        go s.triggerScan(ctx, d)
-	//    }
-	// }
+	domains, err := s.Repo.GetVerifiedDomains(ctx)
+	if err != nil {
+		log.Printf("Scheduler error: failed to fetch verified domains: %v", err)
+		return
+	}
+
+	for _, d := range domains {
+		log.Printf("Triggering automated scan for: %s", d.RootDomain)
+		go func(domain models.Domain) {
+			_, scanErr := s.Orchestrator.RunScan(ctx, domain.RootDomain, domain.ID.String())
+			if scanErr != nil {
+				log.Printf("Automated scan failed for %s: %v", domain.RootDomain, scanErr)
+			} else {
+				log.Printf("Automated scan completed for %s", domain.RootDomain)
+			}
+		}(d)
+	}
 }

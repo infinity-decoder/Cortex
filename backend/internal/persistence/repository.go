@@ -112,3 +112,42 @@ func (r *Repository) GetLatestFindingsForDomain(ctx context.Context, domainID st
 	}
 	return findings, nil
 }
+
+// GetVerifiedDomains returns all domains that have been successfully verified
+func (r *Repository) GetVerifiedDomains(ctx context.Context) ([]models.Domain, error) {
+	query := `SELECT id, org_id, root_domain, verified, verification_token, created_at FROM domains WHERE verified = true`
+	rows, err := r.DB.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var domains []models.Domain
+	for rows.Next() {
+		var d models.Domain
+		err := rows.Scan(&d.ID, &d.OrgID, &d.RootDomain, &d.Verified, &d.VerificationToken, &d.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		domains = append(domains, d)
+	}
+	return domains, nil
+}
+
+// UpdateDomainVerification updates the verification status of a domain
+func (r *Repository) UpdateDomainVerification(ctx context.Context, domainID string, verified bool) error {
+	query := `UPDATE domains SET verified = $1 WHERE id = $2`
+	_, err := r.DB.Pool.Exec(ctx, query, verified, domainID)
+	return err
+}
+
+// GetDomainByName fetches a domain record by its root domain name
+func (r *Repository) GetDomainByName(ctx context.Context, domainName string) (*models.Domain, error) {
+	var d models.Domain
+	query := `SELECT id, org_id, root_domain, verified, verification_token, created_at FROM domains WHERE root_domain = $1 LIMIT 1`
+	err := r.DB.Pool.QueryRow(ctx, query, domainName).Scan(&d.ID, &d.OrgID, &d.RootDomain, &d.Verified, &d.VerificationToken, &d.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
