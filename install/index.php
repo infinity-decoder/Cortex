@@ -163,10 +163,6 @@ if ($is_installed && !isset($_GET['reinstall'])) {
             <div id="step2" class="step">
                 <h3>Application Settings</h3>
                 <div class="input-group">
-                    <label>SaaS Domain</label>
-                    <input type="text" name="app_domain" placeholder="cortex.example.com" required>
-                </div>
-                <div class="input-group">
                     <label>Admin Email</label>
                     <input type="email" name="admin_email" placeholder="admin@example.com" required>
                 </div>

@@ -8,19 +8,24 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$db_host = $_POST['db_host'];
-$db_port = $_POST['db_port'];
-$db_user = $_POST['db_user'];
-$db_pass = $_POST['db_pass'];
-$db_name = $_POST['db_name'];
-$app_domain = $_POST['app_domain'];
-$admin_email = $_POST['admin_email'];
-$org_name = $_POST['org_name'];
+// 0. Sanitize Inputs
+$db_host = filter_input(INPUT_POST, 'db_host', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+$db_port = filter_input(INPUT_POST, 'db_port', FILTER_SANITIZE_NUMBER_INT);
+$db_user = filter_input(INPUT_POST, 'db_user', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+$db_pass = $_POST['db_pass']; // Passwords shouldn't be HTML sanitized
+$db_name = filter_input(INPUT_POST, 'db_name', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+$admin_email = filter_input(INPUT_POST, 'admin_email', FILTER_SANITIZE_EMAIL);
+$org_name = filter_input(INPUT_POST, 'org_name', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 
-// 1. Test PDO Connection
+// Validation
+if (!$admin_email || !filter_var($admin_email, FILTER_VALIDATE_EMAIL)) {
+    die("Invalid admin email address.");
+}
+
+// 1. Test PDO Connection (Corrected constant from ATTR_ERR_CODE to ATTR_ERRMODE)
 try {
     $dsn = "pgsql:host=$db_host;port=$db_port;dbname=postgres";
-    $pdo = new PDO($dsn, $db_user, $db_pass, [PDO::ATTR_ERR_CODE => PDO::ERRMODE_EXCEPTION]);
+    $pdo = new PDO($dsn, $db_user, $db_pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 
     // Create DB if not exists
     $pdo->exec("CREATE DATABASE $db_name");
@@ -52,7 +57,6 @@ try {
 
 // 3. Write .env File
 $env_content = "DATABASE_URL=postgres://$db_user:$db_pass@$db_host:$db_port/$db_name?sslmode=disable\n";
-$env_content .= "APP_DOMAIN=$app_domain\n";
 $env_content .= "PORT=8080\n";
 $env_content .= "NODE_ENV=production\n";
 
@@ -78,8 +82,8 @@ file_put_contents('../.env', $env_content);
     <div class="card">
         <h2>Installation Successful!</h2>
         <p>Cortex has been configured and is ready to secure your attack surface.</p>
-        <p><strong>Next Steps:</strong><br/>1. Start the Go Backend (bin/api.exe)<br/>2. Start the Frontend (npm start)</p>
-        <a href="/" class="btn">Launch Dashboard</a>
+        <p><strong>Next Steps:</strong><br/>1. Start the Go Backend (bin/api.exe)<br/>2. Start the Frontend (npm run dev)</p>
+        <a href="/" class="btn">Launch Portal</a>
     </div>
 </body>
 </html>
