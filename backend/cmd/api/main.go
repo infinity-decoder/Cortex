@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"github.com/infinity-decoder/cortex-backend/internal/auth"
 	"github.com/infinity-decoder/cortex-backend/internal/persistence"
 	"github.com/infinity-decoder/cortex-backend/internal/scanner"
 	"github.com/infinity-decoder/cortex-backend/internal/scheduler"
@@ -67,12 +68,21 @@ func main() {
 			w.Write([]byte("Cortex API v1"))
 		})
 		
-		r.Post("/scan", srv.handleScan)
-		r.Post("/domains/verify", srv.handleVerify)
-		r.Get("/stats", srv.handleStats)
-		r.Get("/assets", srv.handleGetAssets)
-		r.Get("/services", srv.handleGetServices)
-		r.Get("/findings", srv.handleGetFindings)
+		// Public Auth Routes
+		r.Post("/auth/register", srv.handleRegister)
+		r.Post("/auth/login", srv.handleLogin)
+
+		// Protected Routes
+		r.Group(func(r chi.Router) {
+			r.Use(auth.AuthMiddleware)
+			
+			r.Post("/scan", srv.handleScan)
+			r.Post("/domains/verify", srv.handleVerify)
+			r.Get("/stats", srv.handleStats)
+			r.Get("/assets", srv.handleGetAssets)
+			r.Get("/services", srv.handleGetServices)
+			r.Get("/findings", srv.handleGetFindings)
+		})
 	})
 
 	port := 8080

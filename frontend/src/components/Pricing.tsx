@@ -1,75 +1,113 @@
 import { Check } from 'lucide-react';
 import Link from 'next/link';
 
-const plans = [
+const tiers = [
     {
-        name: 'Free',
-        price: '$0',
-        description: 'Perfect for individual developers and small side projects.',
-        features: ['1 Root Domain', 'Unlimited Subdomains', 'Daily Scans', 'Basic Findings Detail', 'Community Support'],
-        cta: 'Get Started',
-        premium: false,
+        name: "Discovery",
+        price: "Free",
+        desc: "Essential reconnaissance for individuals and open-source projects.",
+        features: [
+            "Recursive DNS Enumeration",
+            "3 Verified Domains",
+            "Port & Service Discovery",
+            "Weekly Scan Frequency",
+            "Community Support"
+        ],
+        cta: "Start Free",
+        highlight: false
     },
     {
-        name: 'Pro',
-        price: '$49',
-        description: 'Ideal for growing SaaS startups and DevOps teams.',
-        features: ['5 Root Domains', 'Hourly Scans', 'Priority Email Alerts', 'Remediation Guidance', 'Team RBAC (3 Users)'],
-        cta: 'Start Pro Trial',
-        premium: true,
+        name: "Professional",
+        price: "$490",
+        period: "/mo",
+        desc: "Full attack surface management for growing product teams.",
+        features: [
+            "Unlimited Verified Domains",
+            "Continuous Delta Monitoring",
+            "Kubernetes & Docker Probing",
+            "API Leak Detection",
+            "Priority Slack Support"
+        ],
+        cta: "Start 14-Day Trial",
+        highlight: true
     },
     {
-        name: 'Enterprise',
-        price: 'Custom',
-        description: 'For organizations requires global attack surface scale.',
-        features: ['Unlimited Domains', 'Real-time Monitoring', 'Webhook Integrations', 'Dedicated Account Manager', 'Custom Data Retention'],
-        cta: 'Contact Sales',
-        premium: false,
-    },
+        name: "Enterprise",
+        price: "Custom",
+        desc: "Global-scale vulnerability intelligence for security operations.",
+        features: [
+            "Multi-Org Resource Isolation",
+            "SAML / SSO Integration",
+            "Attack Path Visualization",
+            "Compliance Audit Reports",
+            "Designated Security Lead"
+        ],
+        cta: "Contact Sales",
+        highlight: false
+    }
 ];
 
 export default function Pricing() {
     return (
-        <section id="pricing" className="py-24 relative overflow-hidden">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="text-center mb-16">
-                    <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">Simple, Predictable Pricing</h2>
-                    <p className="text-slate-400 max-w-2xl mx-auto">
-                        Scale your monitoring as your infrastructure grows. Start free, no credit card required.
+        <section id="pricing" className="py-32 bg-slate-950">
+            <div className="max-w-7xl mx-auto px-6">
+                <div className="text-center mb-24">
+                    <h2 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase italic mb-8">
+                        Scale Your <span className="text-slate-500">Security Coverage</span>
+                    </h2>
+                    <p className="text-lg text-slate-500 font-medium max-w-2xl mx-auto leading-relaxed">
+                        Deterministic pricing with no hidden seat costs. Choose the tier that
+                        matches your infrastructure's complexity.
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {plans.map((plan, i) => (
-                        <div key={i} className={`p-8 rounded-3xl border ${plan.premium ? 'bg-slate-800 border-blue-500 shadow-2xl shadow-blue-500/10' : 'bg-slate-800/40 border-slate-700/50'} flex flex-col relative`}>
-                            {plan.premium && (
-                                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-500 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-widest">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+                    {tiers.map((tier, i) => (
+                        <div
+                            key={i}
+                            className={`relative rounded-[2.5rem] p-10 flex flex-col transition-all duration-500 ${tier.highlight
+                                    ? 'bg-blue-600 shadow-[0_0_80px_rgba(37,99,235,0.15)] border-white/20'
+                                    : 'bg-slate-900/30 border border-white/5 hover:bg-slate-900/50'
+                                }`}
+                        >
+                            {tier.highlight && (
+                                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-white text-blue-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl">
                                     Most Popular
                                 </div>
                             )}
-                            <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
-                            <div className="flex items-baseline gap-1 mb-4">
-                                <span className="text-4xl font-extrabold text-white">{plan.price}</span>
-                                {plan.price !== 'Custom' && <span className="text-slate-500 font-medium">/mo</span>}
-                            </div>
-                            <p className="text-sm text-slate-400 mb-8 leading-relaxed">
-                                {plan.description}
-                            </p>
 
-                            <div className="space-y-4 mb-10 flex-1">
-                                {plan.features.map((feature, j) => (
-                                    <div key={j} className="flex items-center gap-3 text-sm text-slate-300">
-                                        <Check size={16} className="text-blue-500 flex-shrink-0" />
-                                        {feature}
+                            <div className="mb-10">
+                                <h3 className={`text-xl font-black uppercase tracking-widest mb-4 ${tier.highlight ? 'text-white' : 'text-slate-400'}`}>
+                                    {tier.name}
+                                </h3>
+                                <div className="flex items-baseline gap-1 mb-4">
+                                    <span className="text-5xl font-black text-white tracking-tighter">{tier.price}</span>
+                                    {tier.period && <span className={`text-sm font-bold ${tier.highlight ? 'text-blue-100' : 'text-slate-600'}`}>{tier.period}</span>}
+                                </div>
+                                <p className={`text-sm font-medium leading-relaxed ${tier.highlight ? 'text-blue-100' : 'text-slate-500'}`}>
+                                    {tier.desc}
+                                </p>
+                            </div>
+
+                            <div className="space-y-4 mb-12 flex-grow">
+                                {tier.features.map((feature, j) => (
+                                    <div key={j} className="flex items-center gap-3">
+                                        <div className={`w-5 h-5 rounded-full flex items-center justify-center ${tier.highlight ? 'bg-white/10' : 'bg-slate-800'}`}>
+                                            <Check size={12} className={tier.highlight ? 'text-white' : 'text-blue-500'} />
+                                        </div>
+                                        <span className={`text-xs font-bold ${tier.highlight ? 'text-white' : 'text-slate-400'}`}>{feature}</span>
                                     </div>
                                 ))}
                             </div>
 
                             <Link
-                                href={plan.name === 'Enterprise' ? '/contact' : '/register'}
-                                className={`w-full py-3 rounded-xl font-bold text-center transition-all active:scale-95 ${plan.premium ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'}`}
+                                href="/register"
+                                className={`block w-full py-4 rounded-2xl text-center text-xs font-black uppercase tracking-widest transition-all active:scale-95 ${tier.highlight
+                                        ? 'bg-white text-blue-600 hover:bg-slate-100 shadow-xl shadow-blue-900/20'
+                                        : 'bg-slate-800 text-white hover:bg-slate-700'
+                                    }`}
                             >
-                                {plan.cta}
+                                {tier.cta}
                             </Link>
                         </div>
                     ))}

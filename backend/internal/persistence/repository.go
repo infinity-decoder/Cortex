@@ -281,3 +281,46 @@ func (r *Repository) GetServicesByDomain(ctx context.Context, domainID string) (
 	}
 	return services, nil
 }
+// CreateUser registers a new user
+func (r *Repository) CreateUser(ctx context.Context, email, passwordHash string) (string, error) {
+	id := uuid.New().String()
+	query := `INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)`
+	_, err := r.DB.Pool.Exec(ctx, query, id, email, passwordHash)
+	return id, err
+}
+
+// GetUserByEmail finds a user by their email
+func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	query := `SELECT id, email, password_hash, created_at FROM users WHERE email = $1`
+	var u models.User
+	var idStr string
+	err := r.DB.Pool.QueryRow(ctx, query, email).Scan(&idStr, &u.Email, &u.PasswordHash, &u.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	u.ID, _ = uuid.Parse(idStr)
+	return &u, nil
+}
+
+// CreateOrganization creates a new org and returns its ID
+func (r *Repository) CreateOrganization(ctx context.Context, name string) (string, error) {
+	id := uuid.New().String()
+	query := `INSERT INTO organizations (id, name, plan_tier) VALUES ($1, $2, 'free')`
+	_, err := r.DB.Pool.Exec(ctx, query, id, name)
+	return id, err
+}
+
+// AddUserToOrganization links a user to an org with a role
+func (r *Repository) AddUserToOrganization(ctx context.Context, orgID, userID, role string) error {
+	query := `INSERT INTO org_users (org_id, user_id, role) VALUES ($1, $2, $3)`
+	_, err := r.DB.Pool.Exec(ctx, query, orgID, userID, role)
+	return err
+}
+
+// GetUserOrganization returns the first organization ID for a user
+func (r *Repository) GetUserOrganization(ctx context.Context, userID string) (string, error) {
+	var orgID string
+	query := `SELECT org_id FROM org_users WHERE user_id = $1 LIMIT 1`
+	err := r.DB.Pool.QueryRow(ctx, query, userID).Scan(&orgID)
+	return orgID, err
+}

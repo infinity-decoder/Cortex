@@ -6,9 +6,13 @@ import (
 	"net/http"
 
 	"github.com/infinity-decoder/cortex-backend/internal/discovery"
+	"github.com/infinity-decoder/cortex-backend/internal/auth"
 	"github.com/infinity-decoder/cortex-backend/internal/persistence"
 	"github.com/infinity-decoder/cortex-backend/internal/risk"
 	"github.com/infinity-decoder/cortex-backend/internal/scanner"
+	"github.com/infinity-decoder/cortex-backend/pkg/models"
+	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Server struct {
@@ -151,10 +155,13 @@ func (s *Server) handleGetFindings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	// In a real app, orgID would come from Auth middleware. Hardcoding for now.
-	orgID := "00000000-0000-0000-0000-000000000000"
+	orgID, ok := ctx.Value(auth.OrgIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "organization id not found in context", http.StatusUnauthorized)
+		return
+	}
 	
-	stats, err := s.Repo.GetGlobalStats(ctx, orgID)
+	stats, err := s.Repo.GetGlobalStats(ctx, orgID.String())
 	if err != nil {
 		http.Error(w, "Failed to fetch stats", http.StatusInternalServerError)
 		return
@@ -185,4 +192,87 @@ func (s *Server) handleGetServices(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(services)
+}
+
+func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		OrgName  string `json:"org_name"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	userID, err := s.Repo.CreateUser(r.Context(), req.Email, string(hashedPassword))
+	if err != nil {
+		http.Error(w, "user already exists or database error", http.StatusConflict)
+		return
+	}
+
+	orgID, err := s.Repo.CreateOrganization(r.Context(), req.OrgName)
+	if err != nil {
+		http.Error(w, "failed to create organization", http.StatusInternalServerError)
+		return
+	}
+
+	err = s.Repo.AddUserToOrganization(r.Context(), orgID, userID, "owner")
+	if err != nil {
+		http.Error(w, "failed to link user to organization", http.StatusInternalServerError)
+		return
+	}
+
+	uUUID, _ := uuid.Parse(userID)
+	oUUID, _ := uuid.Parse(orgID)
+	token, _ := auth.GenerateToken(uUUID, oUUID)
+
+	json.NewEncoder(w).Encode(map[string]string{
+		"token": token,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.Repo.GetUserByEmail(r.Context(), req.Email)
+	if err != nil {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	orgID, err := s.Repo.GetUserOrganization(r.Context(), user.ID.String())
+	if err != nil {
+		http.Error(w, "no organization found for user", http.StatusForbidden)
+		return
+	}
+
+	oUUID, _ := uuid.Parse(orgID)
+	token, _ := auth.GenerateToken(user.ID, oUUID)
+
+	json.NewEncoder(w).Encode(map[string]string{
+		"token": token,
+		"status": "success",
+	})
 }
