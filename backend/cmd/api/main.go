@@ -44,7 +44,7 @@ func main() {
 
 	// CORS Middleware
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"https://*", "http://*"},
+		AllowedOrigins:   []string{"http://localhost:3000", "https://cortex.security"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -81,7 +81,13 @@ func main() {
 			r.Get("/stats", srv.handleStats)
 			r.Get("/assets", srv.handleGetAssets)
 			r.Get("/services", srv.handleGetServices)
+			r.Get("/services", srv.handleGetServices)
 			r.Get("/findings", srv.handleGetFindings)
+			r.Get("/domains", srv.handleGetDomains)
+
+			// Billing Routes
+			r.Get("/billing/plan", srv.handleGetPlan)
+			r.Put("/billing/plan", srv.handleUpdatePlan)
 		})
 	})
 

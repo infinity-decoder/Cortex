@@ -116,10 +116,10 @@ func (r *Repository) GetLatestFindingsForDomain(ctx context.Context, domainID st
 	return findings, nil
 }
 
-// GetVerifiedDomains returns all domains that have been successfully verified
-func (r *Repository) GetVerifiedDomains(ctx context.Context) ([]models.Domain, error) {
-	query := `SELECT id, org_id, root_domain, verified, verification_token, created_at FROM domains WHERE verified = true`
-	rows, err := r.DB.Pool.Query(ctx, query)
+// GetVerifiedDomains returns all domains that have been successfully verified for a specific org
+func (r *Repository) GetVerifiedDomains(ctx context.Context, orgID string) ([]models.Domain, error) {
+	query := `SELECT id, org_id, root_domain, verified, verification_token, created_at FROM domains WHERE verified = true AND org_id = $1`
+	rows, err := r.DB.Pool.Query(ctx, query, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -144,11 +144,11 @@ func (r *Repository) UpdateDomainVerification(ctx context.Context, domainID stri
 	return err
 }
 
-// GetDomainByName fetches a domain record by its root domain name
-func (r *Repository) GetDomainByName(ctx context.Context, domainName string) (*models.Domain, error) {
+// GetDomainByNameAndOrg fetches a domain record by its root domain name and org ID
+func (r *Repository) GetDomainByNameAndOrg(ctx context.Context, domainName string, orgID string) (*models.Domain, error) {
 	var d models.Domain
-	query := `SELECT id, org_id, root_domain, verified, verification_token, created_at FROM domains WHERE root_domain = $1 LIMIT 1`
-	err := r.DB.Pool.QueryRow(ctx, query, domainName).Scan(&d.ID, &d.OrgID, &d.RootDomain, &d.Verified, &d.VerificationToken, &d.CreatedAt)
+	query := `SELECT id, org_id, root_domain, verified, verification_token, created_at FROM domains WHERE root_domain = $1 AND org_id = $2 LIMIT 1`
+	err := r.DB.Pool.QueryRow(ctx, query, domainName, orgID).Scan(&d.ID, &d.OrgID, &d.RootDomain, &d.Verified, &d.VerificationToken, &d.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -282,10 +282,10 @@ func (r *Repository) GetServicesByDomain(ctx context.Context, domainID string) (
 	return services, nil
 }
 // CreateUser registers a new user
-func (r *Repository) CreateUser(ctx context.Context, email, passwordHash string) (string, error) {
+func (r *Repository) CreateUser(ctx context.Context, email, passwordHash, fullName string) (string, error) {
 	id := uuid.New().String()
-	query := `INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)`
-	_, err := r.DB.Pool.Exec(ctx, query, id, email, passwordHash)
+	query := `INSERT INTO users (id, email, password_hash, full_name) VALUES ($1, $2, $3, $4)`
+	_, err := r.DB.Pool.Exec(ctx, query, id, email, passwordHash, fullName)
 	return id, err
 }
 
@@ -323,4 +323,19 @@ func (r *Repository) GetUserOrganization(ctx context.Context, userID string) (st
 	query := `SELECT org_id FROM org_users WHERE user_id = $1 LIMIT 1`
 	err := r.DB.Pool.QueryRow(ctx, query, userID).Scan(&orgID)
 	return orgID, err
+}
+
+// UpdateOrgPlan updates the plan tier for an organization
+func (r *Repository) UpdateOrgPlan(ctx context.Context, orgID string, plan string) error {
+	query := `UPDATE organizations SET plan_tier = $1 WHERE id = $2`
+	_, err := r.DB.Pool.Exec(ctx, query, plan, orgID)
+	return err
+}
+
+// GetOrgPlan retrieves the current plan tier for an organization
+func (r *Repository) GetOrgPlan(ctx context.Context, orgID string) (string, error) {
+	var plan string
+	query := `SELECT plan_tier FROM organizations WHERE id = $1`
+	err := r.DB.Pool.QueryRow(ctx, query, orgID).Scan(&plan)
+	return plan, err
 }

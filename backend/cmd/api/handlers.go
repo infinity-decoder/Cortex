@@ -44,16 +44,21 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	orgID, ok := ctx.Value(auth.OrgIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
-	// 1. Check if Domain is verified
-	domain, err := s.Repo.GetDomainByName(ctx, req.Domain)
+	// 1. Check if Domain is verified and belongs to Org
+	domain, err := s.Repo.GetDomainByNameAndOrg(ctx, req.Domain, orgID.String())
 	if err != nil || !domain.Verified {
 		// Auto-initialize if not exists, but block scan
 		if err != nil {
-			s.Repo.GetOrCreateDomain(ctx, "00000000-0000-0000-0000-000000000000", req.Domain)
+			s.Repo.GetOrCreateDomain(ctx, orgID.String(), req.Domain)
 		}
 		
-		http.Error(w, "Domain not verified. Please verify ownership via DNS TXT record first.", http.StatusForbidden)
+		http.Error(w, "Domain not verified. please verify ownership via DNS TXT record first.", http.StatusForbidden)
 		return
 	}
 
@@ -84,7 +89,13 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	domain, err := s.Repo.GetDomainByName(ctx, req.Domain)
+	orgID, ok := ctx.Value(auth.OrgIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	domain, err := s.Repo.GetDomainByNameAndOrg(ctx, req.Domain, orgID.String())
 	if err != nil {
 		http.Error(w, "Domain not found", http.StatusNotFound)
 		return
@@ -113,7 +124,13 @@ func (s *Server) handleGetAssets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	domain, err := s.Repo.GetDomainByName(ctx, domainName)
+	orgID, ok := ctx.Value(auth.OrgIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	domain, err := s.Repo.GetDomainByNameAndOrg(ctx, domainName, orgID.String())
 	if err != nil {
 		http.Error(w, "Domain not found", http.StatusNotFound)
 		return
@@ -137,7 +154,13 @@ func (s *Server) handleGetFindings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	domain, err := s.Repo.GetDomainByName(ctx, domainName)
+	orgID, ok := ctx.Value(auth.OrgIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	domain, err := s.Repo.GetDomainByNameAndOrg(ctx, domainName, orgID.String())
 	if err != nil {
 		http.Error(w, "Domain not found", http.StatusNotFound)
 		return
@@ -178,7 +201,13 @@ func (s *Server) handleGetServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	domain, err := s.Repo.GetDomainByName(ctx, domainName)
+	orgID, ok := ctx.Value(auth.OrgIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	domain, err := s.Repo.GetDomainByNameAndOrg(ctx, domainName, orgID.String())
 	if err != nil {
 		http.Error(w, "Domain not found", http.StatusNotFound)
 		return
@@ -194,11 +223,56 @@ func (s *Server) handleGetServices(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(services)
 }
 
+func (s *Server) handleUpdatePlan(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Plan string `json:"plan"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	orgID, ok := ctx.Value(auth.OrgIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	err := s.Repo.UpdateOrgPlan(ctx, orgID.String(), req.Plan)
+	if err != nil {
+		http.Error(w, "Failed to update plan", http.StatusInternalServerError)
+		return
+	}
+
+	w.Write([]byte(`{"status": "success"}`))
+}
+
+func (s *Server) handleGetPlan(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	orgID, ok := ctx.Value(auth.OrgIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	plan, err := s.Repo.GetOrgPlan(ctx, orgID.String())
+	if err != nil {
+		http.Error(w, "Failed to fetch plan", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"plan": plan})
+}
+
+func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 		OrgName  string `json:"org_name"`
+		FullName string `json:"full_name"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -212,7 +286,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := s.Repo.CreateUser(r.Context(), req.Email, string(hashedPassword))
+	userID, err := s.Repo.CreateUser(r.Context(), req.Email, string(hashedPassword), req.FullName)
 	if err != nil {
 		http.Error(w, "user already exists or database error", http.StatusConflict)
 		return
@@ -275,4 +349,22 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"token": token,
 		"status": "success",
 	})
+}
+
+func (s *Server) handleGetDomains(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	orgID, ok := ctx.Value(auth.OrgIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	domains, err := s.Repo.GetVerifiedDomains(ctx, orgID.String())
+	if err != nil {
+		http.Error(w, "Failed to fetch domains", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(domains)
 }
