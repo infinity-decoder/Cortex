@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Mail, Lock, User, Building, ArrowRight, ShieldCheck } from 'lucide-react';
@@ -13,10 +14,44 @@ export default function Register() {
         password: '',
         orgName: '',
     });
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const router = useRouter();
 
     const handleNext = (e: React.FormEvent) => {
         e.preventDefault();
         setStep(2);
+    };
+
+    const handleRegister = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+
+        try {
+            const res = await fetch('http://localhost:8080/api/v1/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: formData.email,
+                    password: formData.password,
+                    org_name: formData.orgName
+                })
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Registration failed');
+            }
+
+            const data = await res.json();
+            localStorage.setItem('token', data.token);
+            router.push('/dashboard');
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -38,6 +73,12 @@ export default function Register() {
                         <div className={`h-1 flex-1 rounded-full ${step >= 1 ? 'bg-blue-500' : 'bg-slate-700'}`}></div>
                         <div className={`h-1 flex-1 rounded-full ${step >= 2 ? 'bg-blue-500' : 'bg-slate-700'}`}></div>
                     </div>
+
+                    {error && (
+                        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs font-bold uppercase tracking-widest text-center animate-in fade-in zoom-in duration-300">
+                            {error}
+                        </div>
+                    )}
 
                     <form onSubmit={handleNext} className="space-y-6">
                         {step === 1 ? (
@@ -116,10 +157,16 @@ export default function Register() {
                                 </div>
 
                                 <div className="flex flex-col gap-3">
-                                    <button type="button" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-bold transition-all shadow-lg active:scale-95">
-                                        Start Monitoring
+                                    <button
+                                        type="button"
+                                        onClick={handleRegister}
+                                        disabled={loading}
+                                        className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white py-4 rounded-xl font-bold transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                                    >
+                                        {loading ? 'Creating Account...' : 'Start Monitoring'}
+                                        {!loading && <ArrowRight size={18} />}
                                     </button>
-                                    <button type="button" onClick={() => setStep(1)} className="text-sm text-slate-500 hover:text-slate-300 transition-colors py-2 font-medium">
+                                    <button type="button" onClick={() => setStep(1)} disabled={loading} className="text-sm text-slate-500 hover:text-slate-300 transition-colors py-2 font-medium">
                                         Back to user details
                                     </button>
                                 </div>

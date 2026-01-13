@@ -2,7 +2,8 @@
 
 import DashboardLayout from '@/components/DashboardLayout';
 import { Check, Shield, Zap, Target, Star, CreditCard } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 const tiers = [
     {
@@ -34,6 +35,15 @@ const tiers = [
 ];
 
 export default function Plans() {
+    const router = useRouter();
+
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            router.push('/login');
+        }
+    }, []);
+
     return (
         <DashboardLayout>
             <div className="max-w-6xl mx-auto space-y-12">

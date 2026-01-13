@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import {
   ShieldAlert,
@@ -20,20 +21,37 @@ export default function Dashboard() {
   const [findings, setFindings] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
 
+  const router = useRouter();
+
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.push('/login');
+      return;
+    }
     fetchStats();
     fetchAssets();
     fetchFindings();
   }, []);
 
+  const getHeaders = () => {
+    const token = localStorage.getItem('token');
+    return {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+  };
+
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/v1/stats');
-      if (!res.ok) throw new Error('Failed to fetch real stats');
+      const res = await fetch('http://localhost:8080/api/v1/stats', {
+        headers: getHeaders()
+      });
+      if (!res.ok) throw new Error('Auth failure or API down');
       const data = await res.json();
       setStats(data);
     } catch (e) {
-      console.error('Failed to fetch stats, using fallback mock data');
+      console.warn('Dashboard stats unavailable');
       setStats({
         total_assets: 0,
         critical_risks: 0,
@@ -46,23 +64,27 @@ export default function Dashboard() {
 
   const fetchAssets = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/v1/assets?domain=cortex.security');
+      const res = await fetch('http://localhost:8080/api/v1/assets?domain=cortex.security', {
+        headers: getHeaders()
+      });
       if (!res.ok) throw new Error('API Error');
       const data = await res.json();
-      setAssets(data.slice(0, 4)); // Only show top 4 on dashboard
+      setAssets(data.slice(0, 4));
     } catch (e) {
-      console.error('Failed to fetch dashboard assets');
+      console.warn('Dashboard assets unavailable');
     }
   };
 
   const fetchFindings = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/v1/findings?domain=cortex.security');
+      const res = await fetch('http://localhost:8080/api/v1/findings?domain=cortex.security', {
+        headers: getHeaders()
+      });
       if (!res.ok) throw new Error('API Error');
       const data = await res.json();
-      setFindings(data.slice(0, 3)); // Only show top 3 on dashboard
+      setFindings(data.slice(0, 3));
     } catch (e) {
-      console.error('Failed to fetch dashboard findings');
+      console.warn('Dashboard findings unavailable');
     }
   };
 

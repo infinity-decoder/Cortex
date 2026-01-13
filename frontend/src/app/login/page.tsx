@@ -1,10 +1,44 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Mail, Lock, LogIn, ArrowLeft } from 'lucide-react';
 
 export default function Login() {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const router = useRouter();
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+
+        try {
+            const res = await fetch('http://localhost:8080/api/v1/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Invalid credentials');
+            }
+
+            const data = await res.json();
+            localStorage.setItem('token', data.token);
+            router.push('/dashboard');
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
     return (
         <div className="min-h-screen bg-background flex items-center justify-center p-4">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-500/5 blur-[120px] rounded-full -z-10"></div>
@@ -21,7 +55,12 @@ export default function Login() {
                 </div>
 
                 <div className="bg-slate-800/40 border border-slate-700 p-8 rounded-2xl shadow-2xl backdrop-blur-xl">
-                    <form className="space-y-6">
+                    {error && (
+                        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs font-bold uppercase tracking-widest text-center animate-in fade-in zoom-in duration-300">
+                            {error}
+                        </div>
+                    )}
+                    <form onSubmit={handleLogin} className="space-y-6">
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-slate-300 ml-1">Email Address</label>
                             <div className="relative group">
@@ -31,6 +70,8 @@ export default function Login() {
                                     placeholder="name@company.com"
                                     required
                                     className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
                                 />
                             </div>
                         </div>
@@ -47,12 +88,19 @@ export default function Login() {
                                     placeholder="••••••••"
                                     required
                                     className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
                                 />
                             </div>
                         </div>
 
-                        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-bold transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
-                            Log In <LogIn size={18} />
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white py-4 rounded-xl font-bold transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                        >
+                            {loading ? 'Authenticating...' : 'Log In'}
+                            {!loading && <LogIn size={18} />}
                         </button>
                     </form>
                 </div>

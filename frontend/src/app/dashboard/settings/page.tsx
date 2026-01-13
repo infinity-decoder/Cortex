@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import {
     Building,
@@ -31,6 +32,14 @@ const mockUsers = [
 
 export default function Settings() {
     const [activeTab, setActiveTab] = useState('general');
+    const router = useRouter();
+
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            router.push('/login');
+        }
+    }, []);
 
     return (
         <DashboardLayout>
@@ -48,8 +57,8 @@ export default function Settings() {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id
-                                        ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-lg shadow-blue-500/5'
-                                        : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900/50'
+                                    ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-lg shadow-blue-500/5'
+                                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900/50'
                                     }`}
                             >
                                 <tab.icon size={18} />

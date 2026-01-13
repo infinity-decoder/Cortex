@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import {
     ShieldAlert,
@@ -23,20 +24,36 @@ export default function Findings() {
     const [selectedFinding, setSelectedFinding] = useState<any>(null);
     const [findings, setFindings] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const router = useRouter();
 
     useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            router.push('/login');
+            return;
+        }
         fetchFindings();
     }, []);
 
+    const getHeaders = () => {
+        const token = localStorage.getItem('token');
+        return {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        };
+    };
+
     const fetchFindings = async () => {
         try {
-            const res = await fetch('http://localhost:8080/api/v1/findings?domain=cortex.security');
+            const res = await fetch('http://localhost:8080/api/v1/findings?domain=cortex.security', {
+                headers: getHeaders()
+            });
             if (!res.ok) throw new Error('API Error');
             const data = await res.json();
             setFindings(data);
         } catch (e) {
-            console.error('Failed to fetch findings:', e);
-            setFindings([]); // or fallback mock if desired
+            console.warn('Live findings unavailable');
+            setFindings([]);
         }
         setLoading(false);
     };

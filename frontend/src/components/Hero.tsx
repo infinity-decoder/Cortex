@@ -36,7 +36,7 @@ export default function Hero() {
                         <span className="relative z-10">Start Monitoring Free</span>
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                     </Link>
-                    <Link href="/dashboard" className="px-10 py-5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-2xl font-black text-sm uppercase tracking-widest transition-all border border-slate-800 active:scale-95 shadow-xl">
+                    <Link href="/demo" className="px-10 py-5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-2xl font-black text-sm uppercase tracking-widest transition-all border border-slate-800 active:scale-95 shadow-xl">
                         Watch Demo
                     </Link>
                 </div>

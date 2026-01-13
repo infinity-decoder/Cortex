@@ -2,7 +2,8 @@
 
 import DashboardLayout from '@/components/DashboardLayout';
 import { Bell, AlertTriangle, ShieldCheck, Mail, MessageSquare, Plus, MoreVertical, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 const mockAlerts = [
     { id: 'AL-001', type: 'Exposure Detected', target: 'cortex.security', severity: 'critical', desc: 'Kubernetes API server exposed on port 6443 with unauthenticated access.', date: '2h ago', status: 'unread' },
@@ -12,6 +13,14 @@ const mockAlerts = [
 
 export default function Alerts() {
     const [alerts, setAlerts] = useState(mockAlerts);
+    const router = useRouter();
+
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            router.push('/login');
+        }
+    }, []);
 
     return (
         <DashboardLayout>

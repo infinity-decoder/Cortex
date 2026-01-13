@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import {
     Clock,
@@ -28,6 +29,15 @@ const mockHistory = [
 ];
 
 export default function Monitoring() {
+    const router = useRouter();
+
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            router.push('/login');
+        }
+    }, []);
+
     return (
         <DashboardLayout>
             <div className="max-w-7xl mx-auto space-y-12">

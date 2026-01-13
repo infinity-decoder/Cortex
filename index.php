@@ -46,13 +46,26 @@ $target_url = $is_logged_in ? "$frontend_base/dashboard" : "$frontend_base/";
             <svg xmlns="http://www.w3.org/2000/svg" class="text-white w-12 h-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
         
-        <h1 class="text-3xl font-extrabold text-white mb-3 tracking-tight">Cortex Gateway</h1>
-        <p class="text-slate-500 text-sm mb-10 leading-relaxed font-medium">
-            Bridging to your high-perfomance security surface. 
-            <span class="block mt-1 text-slate-400">Redirecting to <?php echo $is_logged_in ? 'Dashboard' : 'Landing Page'; ?>...</span>
+        <h1 class="text-3xl font-extrabold text-white mb-3 tracking-tight italic uppercase">Cortex Gateway</h1>
+        <p class="text-slate-500 text-sm mb-6 leading-relaxed font-medium">
+            Bridging to your high-performance security surface. 
         </p>
 
+        <div class="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl mb-10 text-left">
+            <h4 class="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2">Network Topology</h4>
+            <div class="flex items-center justify-between text-[11px] font-mono">
+                <span class="text-slate-400">Apache Gateway</span>
+                <span class="text-blue-500 font-bold">Port 80</span>
+            </div>
+            <div class="my-2 border-t border-blue-500/10"></div>
+            <div class="flex items-center justify-between text-[11px] font-mono">
+                <span class="text-slate-400">Next.js Core</span>
+                <span class="text-green-500 font-bold">Port 3000</span>
+            </div>
+        </div>
+
         <div class="space-y-4">
+            <p class="text-xs text-slate-400 italic">Redirecting to <?php echo $is_logged_in ? 'Dashboard' : 'Landing Page'; ?>...</p>
             <a href="<?php echo $target_url; ?>" 
                class="block w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-500/10 active:scale-95 text-sm uppercase tracking-widest">
                 Continue to Platform

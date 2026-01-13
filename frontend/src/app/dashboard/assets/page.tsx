@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import {
     Globe,
@@ -41,8 +42,14 @@ export default function Assets() {
     const [assets, setAssets] = useState<any[]>([]);
     const [services, setServices] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const router = useRouter();
 
     useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            router.push('/login');
+            return;
+        }
         const loadAll = async () => {
             setLoading(true);
             await Promise.all([fetchAssets(), fetchServices()]);
@@ -51,26 +58,38 @@ export default function Assets() {
         loadAll();
     }, []);
 
+    const getHeaders = () => {
+        const token = localStorage.getItem('token');
+        return {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        };
+    };
+
     const fetchAssets = async () => {
         try {
-            const res = await fetch('http://localhost:8080/api/v1/assets?domain=cortex.security');
+            const res = await fetch('http://localhost:8080/api/v1/assets?domain=cortex.security', {
+                headers: getHeaders()
+            });
             if (!res.ok) throw new Error('API Error');
             const data = await res.json();
             setAssets(data);
         } catch (e) {
-            console.error('Failed to fetch live assets');
+            console.warn('Live assets unavailable, using mocks');
             setAssets(mockAssets.domains);
         }
     };
 
     const fetchServices = async () => {
         try {
-            const res = await fetch('http://localhost:8080/api/v1/services?domain=cortex.security');
+            const res = await fetch('http://localhost:8080/api/v1/services?domain=cortex.security', {
+                headers: getHeaders()
+            });
             if (!res.ok) throw new Error('API Error');
             const data = await res.json();
             setServices(data);
         } catch (e) {
-            console.error('Failed to fetch live services');
+            console.warn('Live services unavailable, using mocks');
             setServices(mockAssets.services);
         }
     };
