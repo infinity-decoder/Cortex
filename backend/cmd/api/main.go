@@ -70,6 +70,9 @@ func main() {
 		r.Post("/scan", srv.handleScan)
 		r.Post("/domains/verify", srv.handleVerify)
 		r.Get("/stats", srv.handleStats)
+		r.Get("/assets", srv.handleGetAssets)
+		r.Get("/services", srv.handleGetServices)
+		r.Get("/findings", srv.handleGetFindings)
 	})
 
 	port := 8080

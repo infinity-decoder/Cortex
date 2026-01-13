@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import {
     ShieldAlert,
     ShieldCheck,
+    Globe,
     Info,
     ExternalLink,
     ChevronDown,
@@ -16,50 +17,29 @@ import {
     Terminal
 } from 'lucide-react';
 
-const mockFindings = [
-    {
-        id: 'F-102',
-        title: 'Exposed Docker Remote API (Unauthenticated)',
-        severity: 'critical',
-        category: 'RCE / System Takeover',
-        asset: 'docker.cortex.security',
-        service: 'Docker API (2375/tcp)',
-        detected: '4h ago',
-        status: 'open',
-        description: 'The Docker Remote API is accessible without authentication. Attackers can execute commands, pull/push images, and gain root access to the host system.',
-        remediation: 'Disable TCP access to the Docker API or enforce MTLS authentication using certificates.',
-        evidence: 'GET /v1.24/version HTTP/1.1\nHost: docker.cortex.security:2375\n\nHTTP/1.1 200 OK\nContent-Type: application/json\nApi-Version: 1.24\nArch: amd64\nOs: linux\n...'
-    },
-    {
-        id: 'F-105',
-        title: 'Kubernetes Kubelet API Anonymous Access',
-        severity: 'critical',
-        category: 'Privilege Escalation',
-        asset: 'k8s-node-02',
-        service: 'Kubelet (10250/tcp)',
-        detected: '12h ago',
-        status: 'open',
-        description: 'The Kubelet API allows anonymous users to list pods and potentially execute commands via the /exec endpoint depending on specific cluster permissions.',
-        remediation: 'Set --anonymous-auth=false and --authorization-mode=Webhook in Kubelet configuration.',
-        evidence: 'curl -k https://node-ip:10250/pods\n\n{\n  "kind": "PodList",\n  "items": [...] \n}'
-    },
-    {
-        id: 'F-201',
-        title: 'TLS Certificate Set to Expire Soon',
-        severity: 'medium',
-        category: 'Service Availability',
-        asset: 'api.cortex.security',
-        service: 'HTTPS (443/tcp)',
-        detected: '1d ago',
-        status: 'acknowledged',
-        description: 'The TLS certificate for this asset will expire in less than 7 days. This will cause service disruption and browser warnings.',
-        remediation: 'Renew the certificate via Let\'s Encrypt or your primary CA provider.',
-        evidence: 'Not Before: Jan 13 00:00:00 2026 GMT\nNot After : Jan 20 23:59:59 2026 GMT'
-    }
-];
+// Removed mockFindings as per instruction to fetch real data
 
 export default function Findings() {
     const [selectedFinding, setSelectedFinding] = useState<any>(null);
+    const [findings, setFindings] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchFindings();
+    }, []);
+
+    const fetchFindings = async () => {
+        try {
+            const res = await fetch('http://localhost:8080/api/v1/findings?domain=cortex.security');
+            if (!res.ok) throw new Error('API Error');
+            const data = await res.json();
+            setFindings(data);
+        } catch (e) {
+            console.error('Failed to fetch findings:', e);
+            setFindings([]); // or fallback mock if desired
+        }
+        setLoading(false);
+    };
 
     const getSeverityColor = (sev: string) => {
         switch (sev) {
@@ -104,34 +84,41 @@ export default function Findings() {
                             </button>
                         </div>
 
-                        {mockFindings.map((finding) => (
+                        {loading && <div className="text-center py-10 text-slate-500 font-bold uppercase tracking-widest text-xs animate-pulse">Analyzing findings...</div>}
+                        {!loading && findings.length === 0 && (
+                            <div className="p-10 text-center bg-slate-900/20 border border-slate-800 rounded-2xl">
+                                <ShieldCheck size={48} className="mx-auto text-slate-800 mb-4" />
+                                <p className="text-sm text-slate-600 font-bold uppercase">No critical exposures detected</p>
+                            </div>
+                        )}
+                        {!loading && findings.map((finding) => (
                             <div
-                                key={finding.id}
+                                key={finding.ID}
                                 onClick={() => setSelectedFinding(finding)}
-                                className={`p-5 rounded-2xl border transition-all cursor-pointer group relative overflow-hidden ${selectedFinding?.id === finding.id
-                                        ? 'bg-slate-800/80 border-blue-500/50 shadow-xl shadow-blue-500/5'
-                                        : 'bg-slate-900/40 border-slate-800 hover:border-slate-700'
+                                className={`p-5 rounded-2xl border transition-all cursor-pointer group relative overflow-hidden ${selectedFinding?.ID === finding.ID
+                                    ? 'bg-slate-800/80 border-blue-500/50 shadow-xl shadow-blue-500/5'
+                                    : 'bg-slate-900/40 border-slate-800 hover:border-slate-700'
                                     }`}
                             >
                                 <div className="flex justify-between items-start mb-3">
                                     <div className="flex items-center gap-2">
-                                        <span className={`text-[10px] font-extrabold border px-2 py-0.5 rounded-full uppercase tracking-widest ${getSeverityColor(finding.severity)}`}>
-                                            {finding.severity}
+                                        <span className={`text-[10px] font-extrabold border px-2 py-0.5 rounded-full uppercase tracking-widest ${getSeverityColor(finding.Severity || finding.severity)}`}>
+                                            {finding.Severity || finding.severity}
                                         </span>
-                                        <span className="text-[10px] text-slate-500 font-bold font-mono tracking-tight">{finding.id}</span>
+                                        <span className="text-[10px] text-slate-500 font-bold font-mono tracking-tight">{(finding.ID || finding.id).split('-')[0]}</span>
                                     </div>
-                                    <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">{finding.detected}</span>
+                                    <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">{finding.Detected || 'Just now'}</span>
                                 </div>
-                                <h3 className={`text-sm md:text-base font-bold text-white transition-colors group-hover:text-blue-400 ${selectedFinding?.id === finding.id ? 'text-blue-400' : ''}`}>
-                                    {finding.title}
+                                <h3 className={`text-sm md:text-base font-bold text-white transition-colors group-hover:text-blue-400 ${selectedFinding?.ID === finding.ID ? 'text-blue-400' : ''}`}>
+                                    {finding.Type || finding.type || finding.title}
                                 </h3>
                                 <div className="flex items-center gap-4 mt-3">
                                     <div className="flex items-center gap-1.5">
                                         <Globe size={12} className="text-slate-600" />
-                                        <span className="text-[10px] text-slate-500 font-mono">{finding.asset}</span>
+                                        <span className="text-[10px] text-slate-500 font-mono">Infrastructure Resource</span>
                                     </div>
                                 </div>
-                                {selectedFinding?.id === finding.id && (
+                                {selectedFinding?.ID === finding.ID && (
                                     <div className="absolute top-0 right-0 w-1 h-full bg-blue-500"></div>
                                 )}
                             </div>
@@ -151,21 +138,23 @@ export default function Findings() {
                                 <div className="flex justify-between items-start">
                                     <div>
                                         <span className="text-[10px] text-blue-500 font-extrabold uppercase tracking-[0.2em] mb-2 block">Exposure Intelligence</span>
-                                        <h2 className="text-xl font-extrabold text-white leading-tight">{selectedFinding.title}</h2>
+                                        <h2 className="text-xl font-extrabold text-white leading-tight">{selectedFinding.Type || selectedFinding.type || selectedFinding.title}</h2>
                                     </div>
                                     <button className="text-slate-500 hover:text-white"><CheckCircle2 size={24} /></button>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800">
-                                        <div className="text-[10px] font-extrabold text-slate-600 uppercase mb-1">Attack Category</div>
-                                        <div className="text-sm font-bold text-blue-400">{selectedFinding.category}</div>
+                                        <div className="text-[10px] font-extrabold text-slate-600 uppercase mb-1">Risk Severity</div>
+                                        <div className={`text-sm font-bold uppercase tracking-widest ${getSeverityColor(selectedFinding.Severity || selectedFinding.severity).split(' ')[0]}`}>
+                                            {selectedFinding.Severity || selectedFinding.severity}
+                                        </div>
                                     </div>
                                     <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800">
                                         <div className="text-[10px] font-extrabold text-slate-600 uppercase mb-1">Status</div>
                                         <div className="text-sm font-bold text-green-500 flex items-center gap-1.5 uppercase tracking-widest">
                                             <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                                            {selectedFinding.status}
+                                            OPEN
                                         </div>
                                     </div>
                                 </div>
@@ -175,7 +164,7 @@ export default function Findings() {
                                         <Info size={14} /> Description
                                     </h4>
                                     <p className="text-sm text-slate-400 leading-relaxed">
-                                        {selectedFinding.description}
+                                        {selectedFinding.Description || selectedFinding.description}
                                     </p>
                                 </div>
 
@@ -185,7 +174,7 @@ export default function Findings() {
                                     </h4>
                                     <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 border-l-4 border-l-green-500">
                                         <p className="text-sm text-slate-300 font-medium leading-relaxed italic">
-                                            "{selectedFinding.remediation}"
+                                            "{selectedFinding.Remediation || selectedFinding.remediation}"
                                         </p>
                                     </div>
                                 </div>
@@ -199,7 +188,7 @@ export default function Findings() {
                                     </div>
                                     <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 overflow-x-auto">
                                         <pre className="text-[11px] font-mono text-blue-300/80 leading-relaxed">
-                                            {selectedFinding.evidence}
+                                            {selectedFinding.Evidence || selectedFinding.evidence || 'No raw evidence captured for this risk type.'}
                                         </pre>
                                     </div>
                                 </div>

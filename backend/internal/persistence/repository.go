@@ -190,3 +190,94 @@ func (r *Repository) GetDomainByID(ctx context.Context, domainID string) (*model
 	}
 	return &d, nil
 }
+// GetAssetsByDomain retrieves all discovered assets for a root domain
+func (r *Repository) GetAssetsByDomain(ctx context.Context, domainID string) ([]models.Asset, error) {
+	query := `SELECT id, domain_id, subdomain, ip_address, last_seen FROM assets WHERE domain_id = $1 ORDER BY last_seen DESC`
+	rows, err := r.DB.Pool.Query(ctx, query, domainID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var assets []models.Asset
+	for rows.Next() {
+		var a models.Asset
+		err := rows.Scan(&a.ID, &a.DomainID, &a.Subdomain, &a.IPAddress, &a.LastSeen)
+		if err != nil {
+			return nil, err
+		}
+		assets = append(assets, a)
+	}
+	return assets, nil
+}
+
+// GetGlobalStats calculates real counts across the platform or org
+func (r *Repository) GetGlobalStats(ctx context.Context, orgID string) (map[string]interface{}, error) {
+	var totalAssets, criticalRisks, highRisks, scansCompleted int
+
+	// Count Assets
+	err := r.DB.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM assets a JOIN domains d ON a.domain_id = d.id WHERE d.org_id = $1", orgID).Scan(&totalAssets)
+	if err != nil { return nil, err }
+
+	// Count Critical Risks
+	err = r.DB.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM findings f JOIN services s ON f.service_id = s.id JOIN assets a ON s.asset_id = a.id JOIN domains d ON a.domain_id = d.id WHERE d.org_id = $1 AND f.severity = 'critical'", orgID).Scan(&criticalRisks)
+	if err != nil { return nil, err }
+
+	// Count High Risks
+	err = r.DB.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM findings f JOIN services s ON f.service_id = s.id JOIN assets a ON s.asset_id = a.id JOIN domains d ON a.domain_id = d.id WHERE d.org_id = $1 AND f.severity = 'high'", orgID).Scan(&highRisks)
+	if err != nil { return nil, err }
+
+	// Count Scans
+	err = r.DB.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM scan_runs sr JOIN domains d ON sr.domain_id = d.id WHERE d.org_id = $1", orgID).Scan(&scansCompleted)
+	if err != nil { return nil, err }
+
+	return map[string]interface{}{
+		"total_assets":    totalAssets,
+		"critical_risks":  criticalRisks,
+		"high_risks":      highRisks,
+		"scans_completed": scansCompleted,
+		"trending_up":     true,
+	}, nil
+}
+// GetServicesByDomain retrieves all services for all assets of a domain
+func (r *Repository) GetServicesByDomain(ctx context.Context, domainID string) ([]map[string]interface{}, error) {
+	query := `
+		SELECT s.port, s.protocol, s.fingerprint, s.technology, a.subdomain as asset_name, f.severity as risk
+		FROM services s
+		JOIN assets a ON s.asset_id = a.id
+		LEFT JOIN findings f ON f.service_id = s.id
+		WHERE a.domain_id = $1
+		ORDER BY s.port ASC
+	`
+	rows, err := r.DB.Pool.Query(ctx, query, domainID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var services []map[string]interface{}
+	for rows.Next() {
+		var port int
+		var protocol, fingerprint, technology, assetName string
+		var risk *string
+		err := rows.Scan(&port, &protocol, &fingerprint, &technology, &assetName, &risk)
+		if err != nil {
+			return nil, err
+		}
+		
+		rVal := "low"
+		if risk != nil {
+			rVal = *risk
+		}
+
+		services = append(services, map[string]interface{}{
+			"port":       port,
+			"proto":      protocol,
+			"asset":      assetName,
+			"service":    technology, // technology usually holds the service name
+			"risk":       rVal,
+			"fingerprint": fingerprint,
+		})
+	}
+	return services, nil
+}

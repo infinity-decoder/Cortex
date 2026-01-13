@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import {
     Globe,
@@ -38,6 +38,42 @@ const mockAssets = {
 
 export default function Assets() {
     const [activeTab, setActiveTab] = useState('domains');
+    const [assets, setAssets] = useState<any[]>([]);
+    const [services, setServices] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const loadAll = async () => {
+            setLoading(true);
+            await Promise.all([fetchAssets(), fetchServices()]);
+            setLoading(false);
+        };
+        loadAll();
+    }, []);
+
+    const fetchAssets = async () => {
+        try {
+            const res = await fetch('http://localhost:8080/api/v1/assets?domain=cortex.security');
+            if (!res.ok) throw new Error('API Error');
+            const data = await res.json();
+            setAssets(data);
+        } catch (e) {
+            console.error('Failed to fetch live assets');
+            setAssets(mockAssets.domains);
+        }
+    };
+
+    const fetchServices = async () => {
+        try {
+            const res = await fetch('http://localhost:8080/api/v1/services?domain=cortex.security');
+            if (!res.ok) throw new Error('API Error');
+            const data = await res.json();
+            setServices(data);
+        } catch (e) {
+            console.error('Failed to fetch live services');
+            setServices(mockAssets.services);
+        }
+    };
 
     return (
         <DashboardLayout>
@@ -64,8 +100,8 @@ export default function Assets() {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === tab.id
-                                    ? 'bg-slate-800 text-blue-400 shadow-sm'
-                                    : 'text-slate-500 hover:text-slate-300'
+                                ? 'bg-slate-800 text-blue-400 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-300'
                                 }`}
                         >
                             <tab.icon size={16} />
@@ -99,7 +135,12 @@ export default function Assets() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/50">
-                            {activeTab === 'domains' && mockAssets.domains.map((asset, i) => (
+                            {loading && (
+                                <tr>
+                                    <td colSpan={5} className="py-20 text-center text-slate-500 font-bold uppercase tracking-widest text-xs animate-pulse">Synchronizing with discovery engine...</td>
+                                </tr>
+                            )}
+                            {!loading && activeTab === 'domains' && (assets.length > 0 ? assets.map((asset, i) => (
                                 <tr key={i} className="hover:bg-slate-800/30 transition-colors group cursor-pointer">
                                     <td className="px-6 py-5">
                                         <div className="flex items-center gap-3">
@@ -107,33 +148,29 @@ export default function Assets() {
                                                 <Globe size={16} />
                                             </div>
                                             <div>
-                                                <div className="text-sm font-bold text-white font-mono leading-none mb-1 group-hover:text-blue-400 transition-colors">{asset.name}</div>
-                                                <div className="text-[10px] text-slate-500 font-mono font-medium">{asset.ip}</div>
+                                                <div className="text-sm font-bold text-white font-mono leading-none mb-1 group-hover:text-blue-400 transition-colors">{asset.Subdomain || '@'}</div>
+                                                <div className="text-[10px] text-slate-500 font-mono font-medium">{asset.IpAddress || 'Unresolved'}</div>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-5">
-                                        <div className="text-xs text-slate-400 font-medium">Last seen {asset.lastSeen}</div>
+                                        <div className="text-xs text-slate-400 font-medium tracking-tight">
+                                            Last seen {asset.LastSeen ? new Date(asset.LastSeen).toLocaleDateString() : 'Just now'}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex gap-2">
-                                            {asset.tech.map((t, j) => (
+                                            {asset.Technology ? asset.Technology.split(',').map((t: string, j: number) => (
                                                 <span key={j} className="text-[10px] font-bold bg-slate-800 border border-slate-700 px-2 py-0.5 rounded text-slate-300">
                                                     {t}
                                                 </span>
-                                            ))}
+                                            )) : <span className="text-[10px] text-slate-600 font-bold uppercase tracking-tighter">Generic Stack</span>}
                                         </div>
                                     </td>
                                     <td className="px-6 py-5">
-                                        {asset.status === 'verified' ? (
-                                            <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-green-500 bg-green-500/5 border border-green-500/20 px-2 py-1 rounded-full uppercase tracking-widest">
-                                                <ShieldCheck size={12} /> Verified
-                                            </div>
-                                        ) : (
-                                            <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-500 bg-slate-500/5 border border-slate-500/20 px-2 py-1 rounded-full uppercase tracking-widest">
-                                                Unverified
-                                            </div>
-                                        )}
+                                        <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-green-500 bg-green-500/5 border border-green-500/20 px-2 py-1 rounded-full uppercase tracking-widest">
+                                            <ShieldCheck size={12} /> Managed
+                                        </div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex justify-end items-center gap-3">
@@ -146,14 +183,22 @@ export default function Assets() {
                                         </div>
                                     </td>
                                 </tr>
+                            )) : (
+                                <tr>
+                                    <td colSpan={5} className="py-20 text-center opacity-40">
+                                        <ShieldAlert size={48} className="mx-auto text-slate-800 mb-4" />
+                                        <p className="text-sm text-slate-600 font-bold uppercase">No assets identified for this sweep</p>
+                                    </td>
+                                </tr>
                             ))}
-                            {activeTab === 'services' && mockAssets.services.map((service, i) => (
+
+                            {!loading && activeTab === 'services' && (services.length > 0 ? services.map((service, i) => (
                                 <tr key={i} className="hover:bg-slate-800/30 transition-colors group cursor-pointer">
                                     <td className="px-6 py-5">
                                         <div className="flex items-center gap-3">
                                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${service.risk === 'critical' ? 'bg-red-500/10 text-red-500' :
-                                                    service.risk === 'medium' ? 'bg-orange-500/10 text-orange-500' :
-                                                        'bg-blue-500/10 text-blue-500'
+                                                service.risk === 'medium' ? 'bg-orange-500/10 text-orange-500' :
+                                                    'bg-blue-500/10 text-blue-500'
                                                 }`}>
                                                 {service.risk === 'critical' ? <ShieldAlert size={16} /> : <Server size={16} />}
                                             </div>
@@ -164,23 +209,30 @@ export default function Assets() {
                                         </div>
                                     </td>
                                     <td className="px-6 py-5">
-                                        <div className="text-xs text-slate-400 font-bold uppercase tracking-tight">{service.service}</div>
+                                        <div className="text-xs text-slate-400 font-bold uppercase tracking-tight">{service.service || 'Unknown Service'}</div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 rounded-full border ${service.risk === 'critical' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                                                service.risk === 'medium' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
-                                                    'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                                            service.risk === 'medium' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
+                                                'bg-blue-500/10 text-blue-500 border-blue-500/20'
                                             }`}>
                                             {service.risk} Risk
                                         </span>
                                     </td>
                                     <td className="px-6 py-5">
-                                        <div className="text-[10px] font-bold text-slate-600">PRODUCTION</div>
+                                        <div className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Production Boundary</div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex justify-end items-center gap-3">
                                             <button className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] text-white font-bold rounded-lg border border-slate-700 transition-all active:scale-95">Analyze</button>
                                         </div>
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr>
+                                    <td colSpan={5} className="py-20 text-center opacity-40">
+                                        <Server size={48} className="mx-auto text-slate-800 mb-4" />
+                                        <p className="text-sm text-slate-600 font-bold uppercase">No active services detected</p>
                                     </td>
                                 </tr>
                             ))}

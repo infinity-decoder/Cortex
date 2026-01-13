@@ -16,29 +16,53 @@ import {
 export default function Dashboard() {
   const [domain, setDomain] = useState('');
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<any>(null);
+  const [assets, setAssets] = useState<any[]>([]);
+  const [findings, setFindings] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStats();
+    fetchAssets();
+    fetchFindings();
   }, []);
 
   const fetchStats = async () => {
     try {
       const res = await fetch('http://localhost:8080/api/v1/stats');
+      if (!res.ok) throw new Error('Failed to fetch real stats');
       const data = await res.json();
       setStats(data);
     } catch (e) {
-      console.error('Failed to fetch stats');
-      // Mock stats for UI preview if backend is down
+      console.error('Failed to fetch stats, using fallback mock data');
       setStats({
-        total_assets: 12,
-        critical_risks: 3,
-        high_risks: 8,
-        scans_completed: 45,
-        trending_up: true
+        total_assets: 0,
+        critical_risks: 0,
+        high_risks: 0,
+        scans_completed: 0,
+        trending_up: false
       });
+    }
+  };
+
+  const fetchAssets = async () => {
+    try {
+      const res = await fetch('http://localhost:8080/api/v1/assets?domain=cortex.security');
+      if (!res.ok) throw new Error('API Error');
+      const data = await res.json();
+      setAssets(data.slice(0, 4)); // Only show top 4 on dashboard
+    } catch (e) {
+      console.error('Failed to fetch dashboard assets');
+    }
+  };
+
+  const fetchFindings = async () => {
+    try {
+      const res = await fetch('http://localhost:8080/api/v1/findings?domain=cortex.security');
+      if (!res.ok) throw new Error('API Error');
+      const data = await res.json();
+      setFindings(data.slice(0, 3)); // Only show top 3 on dashboard
+    } catch (e) {
+      console.error('Failed to fetch dashboard findings');
     }
   };
 
@@ -137,7 +161,7 @@ export default function Dashboard() {
               </div>
             </section>
 
-            {/* Subdomain Explorer (Placeholder) */}
+            {/* Subdomain Explorer */}
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-white flex items-center gap-3">
@@ -147,23 +171,22 @@ export default function Dashboard() {
                 <button className="text-xs text-blue-500 font-bold hover:text-blue-400">View All Assets</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  { name: 'api.cortex.sh', ip: '1.1.1.1', status: 'online' },
-                  { name: 'k8s-console.cortex.sh', ip: '2.2.2.2', status: 'online' },
-                  { name: 'staging.cortex.sh', ip: '3.3.3.3', status: 'offline' },
-                  { name: 'docker.cortex.sh', ip: '4.4.4.4', status: 'online' }
-                ].map((asset, i) => (
+                {assets.length > 0 ? assets.map((asset, i) => (
                   <div key={i} className="bg-slate-900/50 border border-slate-800 p-4 rounded-xl flex items-center justify-between group hover:border-slate-700 transition-colors">
                     <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${asset.status === 'online' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
+                      <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></div>
                       <div>
-                        <div className="text-sm font-bold text-white font-mono">{asset.name}</div>
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{asset.ip}</div>
+                        <div className="text-sm font-bold text-white font-mono">{asset.Subdomain || '@'}</div>
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{asset.IpAddress || 'Unresolved'}</div>
                       </div>
                     </div>
                     <ArrowUpRight size={14} className="text-slate-600 group-hover:text-white transition-colors" />
                   </div>
-                ))}
+                )) : (
+                  <div className="col-span-2 py-10 text-center bg-slate-900/20 border border-slate-800 rounded-xl border-dashed">
+                    <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">No active monitoring data</p>
+                  </div>
+                )}
               </div>
             </section>
           </div>
@@ -173,24 +196,24 @@ export default function Dashboard() {
             <section className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6">
               <h3 className="text-sm font-extrabold text-slate-500 uppercase tracking-widest mb-6">Recent Delta Alerts</h3>
               <div className="space-y-6">
-                {[
-                  { title: 'New Subdomain Detected', time: '2h ago', level: 'info' },
-                  { title: 'Kubelet API Exposure', time: '5h ago', level: 'critical' },
-                  { title: 'TLS Cert Expiration', time: '12h ago', level: 'medium' }
-                ].map((alert, i) => (
+                {findings.length > 0 ? findings.map((finding, i) => (
                   <div key={i} className="flex gap-4 relative">
                     <div className="flex flex-col items-center">
-                      <div className={`w-3 h-3 rounded-full ${alert.level === 'critical' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
-                        alert.level === 'medium' ? 'bg-yellow-500' : 'bg-blue-500'
+                      <div className={`w-3 h-3 rounded-full ${(finding.Severity || finding.severity) === 'critical' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
+                        (finding.Severity || finding.severity) === 'high' ? 'bg-orange-500' : 'bg-blue-500'
                         }`}></div>
-                      {i < 2 && <div className="w-px flex-1 bg-slate-800 my-2"></div>}
+                      {i < findings.length - 1 && <div className="w-px flex-1 bg-slate-800 my-2"></div>}
                     </div>
                     <div className="-mt-1 pb-4">
-                      <div className="text-sm font-bold text-white leading-tight">{alert.title}</div>
-                      <div className="text-[10px] text-slate-600 font-medium mt-1 uppercase tracking-wider">{alert.time}</div>
+                      <div className="text-sm font-bold text-white leading-tight">{finding.Type || finding.title}</div>
+                      <div className="text-[10px] text-slate-600 font-medium mt-1 uppercase tracking-wider">{finding.Detected || 'Just now'}</div>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="text-center py-4">
+                    <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">All systems nominal</p>
+                  </div>
+                )}
               </div>
             </section>
 

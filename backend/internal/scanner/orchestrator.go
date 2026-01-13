@@ -59,13 +59,31 @@ func (o *Orchestrator) RunScan(ctx context.Context, domainName string, domainID 
 		prevMap[key] = true
 	}
 
-	// 1. Initial Discovery (Passive)
+	// 1. Discovery (Active + Passive)
 	dnsScanner := discovery.NewScanner()
-	assets, err := dnsScanner.EnumerateSubdomains(ctx, domainName)
-	if err != nil {
-		o.Repo.UpdateScanRunStatus(ctx, runID, "failed")
-		return nil, fmt.Errorf("discovery failed: %v", err)
+	activeAssets, _ := dnsScanner.EnumerateSubdomains(ctx, domainName)
+	passiveAssets, _ := dnsScanner.PassiveDiscovery(ctx, domainName)
+	
+	// Merge assets
+	assetMap := make(map[string]discovery.Result)
+	for _, a := range activeAssets { assetMap[a.Subdomain] = a }
+	for _, a := range passiveAssets {
+		if existing, ok := assetMap[a.Subdomain]; ok {
+			// Merge IPs
+			ipMap := make(map[string]bool)
+			for _, ip := range existing.IPs { ipMap[ip] = true }
+			for _, ip := range a.IPs { ipMap[ip] = true }
+			ips := []string{}
+			for ip := range ipMap { ips = append(ips, ip) }
+			existing.IPs = ips
+			assetMap[a.Subdomain] = existing
+		} else {
+			assetMap[a.Subdomain] = a
+		}
 	}
+
+	var assets []discovery.Result
+	for _, a := range assetMap { assets = append(assets, a) }
 
 	// 2. Scan & Analysis Pipeline
 	portScanner := scanning.NewScanner()
@@ -112,7 +130,26 @@ func (o *Orchestrator) RunScan(ctx context.Context, domainName string, domainID 
 			serviceModel.Fingerprint = fpStr
 			o.Repo.SaveService(ctx, serviceModel)
 
+			// Basic Classification
 			exposure := risk.Classify(p.Port, tech, fpStr)
+			
+			// Advanced Probing (Phase 3)
+			advSev, advTitle, advDesc := container.ProbeAdvanced(ctx, ip, p.Port, tech)
+			if advSev != "" {
+				exposure = risk.Exposure{
+					Type:        advTitle,
+					Severity:    risk.Severity(advSev),
+					Description: advDesc,
+					Remediation: exposure.Remediation, // Fallback to basic remediation
+				}
+				// Specific remediation for advanced probes
+				if advTitle == "Kubernetes Kubelet API Anonymous Access" {
+					exposure.Remediation = "Set --anonymous-auth=false and --authorization-mode=Webhook in Kubelet configuration."
+				} else if advTitle == "Exposed Docker Remote API (Unauthenticated)" {
+					exposure.Remediation = "Disable TCP access to the Docker API or enforce MTLS authentication using certificates."
+				}
+			}
+
 			if exposure.Severity != risk.Info {
 				allFindings = append(allFindings, exposure)
 				

@@ -1,94 +1,74 @@
 <?php
 /**
- * Cortex Entry Point
- * Handles redirection between Installer and Landing Page
+ * Cortex Smart Gateway
+ * Intelligent routing between Installer, Landing Page, and Dashboard.
  */
 
-// Check for existence of .env file
+// 1. Bootstrap Check
 $is_installed = file_exists('.env');
-
 if (!$is_installed) {
-    // Not installed, redirect to the Setup Wizard
     header('Location: ./install/');
     exit;
 }
 
-// Already installed. 
-// In a production environment with a proxy, this part would usually be handled by Nginx/Apache.
-// For local testing/Laragon, we'll redirect to the Frontend Dashboard.
-// We assume default port 3000 for Next.js, or the user can navigate manually.
+// 2. Routing Configuration
+$frontend_base = "http://localhost:3000";
+$is_logged_in = isset($_COOKIE['token']) || isset($_COOKIE['auth_token']);
+$target_url = $is_logged_in ? "$frontend_base/dashboard" : "$frontend_base/";
 
+/**
+ * We render a premium transition page to ensure the user understands 
+ * the bridge between the PHP environment and the Next.js Frontend.
+ */
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cortex | Security Monitoring</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <title>Cortex | Smart Gateway</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            background: #0f172a;
-            color: white;
-            font-family: 'Inter', sans-serif;
-            margin: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            text-align: center;
-        }
-        .container {
-            max-width: 600px;
-            padding: 2rem;
-            background: #1e293b;
-            border-radius: 1rem;
-            border: 1px solid #334155;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        }
-        img {
-            width: 80px;
-            margin-bottom: 1.5rem;
-        }
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
-        p {
-            color: #94a3b8;
-            line-height: 1.6;
-            margin-bottom: 2rem;
-        }
-        .btn-group {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-        }
-        .btn {
-            background: #3b82f6;
-            color: white;
-            text-decoration: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            font-weight: 600;
-            transition: 0.2s;
-        }
-        .btn:hover {
-            filter: brightness(1.1);
-        }
-        .btn-secondary {
-            background: #334155;
+        body { font-family: 'Inter', sans-serif; }
+        .bg-mesh {
+            background-color: #0f172a;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(30, 64, 175, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(30, 58, 138, 0.15) 0px, transparent 50%);
         }
     </style>
+    <meta http-equiv="refresh" content="1;url=<?php echo $target_url; ?>">
 </head>
-<body>
-    <div class="container">
-        <img src="frontend/public/cortex_SaaS.png" alt="Cortex Logo">
-        <h1>Welcome to Cortex</h1>
-        <p>Your attack surface monitoring platform is configured and ready. Please ensure your Backend and Frontend services are running to access the dashboard.</p>
-        <div class="btn-group">
-            <a href="http://localhost:3000" class="btn">Launch Dashboard</a>
-            <a href="https://github.com/infinity-decoder/Cortex" target="_blank" class="btn btn-secondary">View Repository</a>
+<body class="bg-mesh text-slate-200 min-h-screen flex items-center justify-center p-6">
+    <div class="max-w-md w-full bg-slate-900/50 border border-slate-800 rounded-3xl p-10 text-center shadow-2xl backdrop-blur-xl">
+        <div class="w-20 h-20 bg-blue-600 rounded-2xl mx-auto mb-8 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <svg xmlns="http://www.w3.org/2000/svg" class="text-white w-12 h-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        
+        <h1 class="text-3xl font-extrabold text-white mb-3 tracking-tight">Cortex Gateway</h1>
+        <p class="text-slate-500 text-sm mb-10 leading-relaxed font-medium">
+            Bridging to your high-perfomance security surface. 
+            <span class="block mt-1 text-slate-400">Redirecting to <?php echo $is_logged_in ? 'Dashboard' : 'Landing Page'; ?>...</span>
+        </p>
+
+        <div class="space-y-4">
+            <a href="<?php echo $target_url; ?>" 
+               class="block w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-500/10 active:scale-95 text-sm uppercase tracking-widest">
+                Continue to Platform
+            </a>
+            
+            <div class="flex items-center justify-center gap-2">
+                <div class="w-1 h-1 rounded-full bg-blue-500 animate-pulse"></div>
+                <div class="w-1 h-1 rounded-full bg-blue-500 animate-pulse delay-75"></div>
+                <div class="w-1 h-1 rounded-full bg-blue-500 animate-pulse delay-150"></div>
+            </div>
+        </div>
+
+        <div class="mt-12 pt-8 border-t border-slate-800/50">
+            <p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+                Environment: Development (Localhost:3000)
+            </p>
         </div>
     </div>
 </body>

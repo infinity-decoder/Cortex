@@ -101,16 +101,88 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
-	// Simplified stats for Trending Cards
-	// In a real app, this would query aggregated findings over time
-	stats := map[string]interface{}{
-		"total_assets":    12,
-		"critical_risks":  3,
-		"high_risks":      8,
-		"scans_completed": 45,
-		"trending_up":     true,
+func (s *Server) handleGetAssets(w http.ResponseWriter, r *http.Request) {
+	domainName := r.URL.Query().Get("domain")
+	if domainName == "" {
+		http.Error(w, "Domain query parameter required", http.StatusBadRequest)
+		return
 	}
+
+	ctx := r.Context()
+	domain, err := s.Repo.GetDomainByName(ctx, domainName)
+	if err != nil {
+		http.Error(w, "Domain not found", http.StatusNotFound)
+		return
+	}
+
+	assets, err := s.Repo.GetAssetsByDomain(ctx, domain.ID.String())
+	if err != nil {
+		http.Error(w, "Failed to fetch assets", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(assets)
+}
+
+func (s *Server) handleGetFindings(w http.ResponseWriter, r *http.Request) {
+	domainName := r.URL.Query().Get("domain")
+	if domainName == "" {
+		http.Error(w, "Domain query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	domain, err := s.Repo.GetDomainByName(ctx, domainName)
+	if err != nil {
+		http.Error(w, "Domain not found", http.StatusNotFound)
+		return
+	}
+
+	findings, err := s.Repo.GetLatestFindingsForDomain(ctx, domain.ID.String())
+	if err != nil {
+		http.Error(w, "Failed to fetch findings", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(findings)
+}
+
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	// In a real app, orgID would come from Auth middleware. Hardcoding for now.
+	orgID := "00000000-0000-0000-0000-000000000000"
+	
+	stats, err := s.Repo.GetGlobalStats(ctx, orgID)
+	if err != nil {
+		http.Error(w, "Failed to fetch stats", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+func (s *Server) handleGetServices(w http.ResponseWriter, r *http.Request) {
+	domainName := r.URL.Query().Get("domain")
+	if domainName == "" {
+		http.Error(w, "Domain query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	domain, err := s.Repo.GetDomainByName(ctx, domainName)
+	if err != nil {
+		http.Error(w, "Domain not found", http.StatusNotFound)
+		return
+	}
+
+	services, err := s.Repo.GetServicesByDomain(ctx, domain.ID.String())
+	if err != nil {
+		http.Error(w, "Failed to fetch services", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(services)
 }
