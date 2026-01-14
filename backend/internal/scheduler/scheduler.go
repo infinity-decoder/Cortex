@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/infinity-decoder/cortex-backend/internal/persistence"
-	"github.com/infinity-decoder/cortex-backend/internal/scanner"
-	"github.com/infinity-decoder/cortex-backend/pkg/models"
+	"cortex-backend/internal/persistence"
+	"cortex-backend/internal/scanner"
+	"cortex-backend/pkg/models"
 )
 
 type Scheduler struct {
@@ -47,7 +47,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 func (s *Scheduler) runPendingScans(ctx context.Context) {
 	log.Println("Checking for pending scans for verified domains...")
 	
-	domains, err := s.Repo.GetVerifiedDomains(ctx)
+	domains, err := s.Repo.GetAllVerifiedDomains(ctx)
 	if err != nil {
 		log.Printf("Scheduler error: failed to fetch verified domains: %v", err)
 		return

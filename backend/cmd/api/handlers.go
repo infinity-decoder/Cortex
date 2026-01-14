@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/infinity-decoder/cortex-backend/internal/discovery"
-	"github.com/infinity-decoder/cortex-backend/internal/auth"
-	"github.com/infinity-decoder/cortex-backend/internal/persistence"
-	"github.com/infinity-decoder/cortex-backend/internal/risk"
-	"github.com/infinity-decoder/cortex-backend/internal/scanner"
-	"github.com/infinity-decoder/cortex-backend/pkg/models"
+	"cortex-backend/internal/discovery"
+	"cortex-backend/internal/auth"
+	"cortex-backend/internal/persistence"
+	"cortex-backend/internal/risk"
+	"cortex-backend/internal/scanner"
+	"cortex-backend/internal/validation"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -42,6 +42,12 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
+	
+	// Validate domain
+	if err := validation.ValidateDomain(req.Domain); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	ctx := r.Context()
 	orgID, ok := ctx.Value(auth.OrgIDKey).(uuid.UUID)
@@ -62,12 +68,33 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Audit log: Scan triggered
+	ctx = auth.WithRequest(ctx, r)
+	auth.LogAction(ctx, s.Repo, "SCAN_TRIGGERED", map[string]interface{}{
+		"domain": req.Domain,
+		"domain_id": domain.ID.String(),
+	})
+
 	// 2. Run Scan via Orchestrator
 	result, err := s.Orchestrator.RunScan(ctx, req.Domain, domain.ID.String())
 	if err != nil {
+		// Audit log: Scan failed
+		auth.LogAction(ctx, s.Repo, "SCAN_FAILED", map[string]interface{}{
+			"domain": req.Domain,
+			"domain_id": domain.ID.String(),
+			"error": err.Error(),
+		})
 		http.Error(w, fmt.Sprintf("Scan failed: %v", err), http.StatusInternalServerError)
 		return
 	}
+	
+	// Audit log: Scan completed
+	auth.LogAction(ctx, s.Repo, "SCAN_COMPLETED", map[string]interface{}{
+		"domain": req.Domain,
+		"domain_id": domain.ID.String(),
+		"assets_found": len(result.Assets),
+		"findings_count": len(result.AllFindings),
+	})
 
 	resp := ScanResponse{
 		Domain:      req.Domain,
@@ -85,6 +112,12 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	var req VerifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	
+	// Validate domain
+	if err := validation.ValidateDomain(req.Domain); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -107,10 +140,25 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx = auth.WithRequest(ctx, r)
+	
 	if success {
 		s.Repo.UpdateDomainVerification(ctx, domain.ID.String(), true)
+		
+		// Audit log: Domain verification
+		auth.LogAction(ctx, s.Repo, "DOMAIN_VERIFIED", map[string]interface{}{
+			"domain": req.Domain,
+			"domain_id": domain.ID.String(),
+		})
+		
 		w.Write([]byte(`{"status": "verified"}`))
 	} else {
+		// Audit log: Domain verification failed
+		auth.LogAction(ctx, s.Repo, "DOMAIN_VERIFY_FAILED", map[string]interface{}{
+			"domain": req.Domain,
+			"domain_id": domain.ID.String(),
+		})
+		
 		w.WriteHeader(http.StatusPreconditionFailed)
 		w.Write([]byte(fmt.Sprintf(`{"status": "failed", "expected": "cortex-verification=%s"}`, domain.VerificationToken)))
 	}
@@ -245,6 +293,13 @@ func (s *Server) handleUpdatePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Audit log: Plan update
+	ctx = auth.WithRequest(ctx, r)
+	auth.LogAction(ctx, s.Repo, "PLAN_UPDATED", map[string]interface{}{
+		"org_id": orgID.String(),
+		"new_plan": req.Plan,
+	})
+
 	w.Write([]byte(`{"status": "success"}`))
 }
 
@@ -267,7 +322,6 @@ func (s *Server) handleGetPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -280,25 +334,48 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate inputs
+	if err := validation.ValidateEmail(req.Email); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	
+	if err := validation.ValidatePassword(req.Password); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	
+	if err := validation.ValidateOrgName(req.OrgName); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	
+	if err := validation.ValidateFullName(req.FullName); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	userID, err := s.Repo.CreateUser(r.Context(), req.Email, string(hashedPassword), req.FullName)
+	ctx := auth.WithRequest(r.Context(), r)
+	
+	userID, err := s.Repo.CreateUser(ctx, req.Email, string(hashedPassword), req.FullName)
 	if err != nil {
 		http.Error(w, "user already exists or database error", http.StatusConflict)
 		return
 	}
 
-	orgID, err := s.Repo.CreateOrganization(r.Context(), req.OrgName)
+	orgID, err := s.Repo.CreateOrganization(ctx, req.OrgName)
 	if err != nil {
 		http.Error(w, "failed to create organization", http.StatusInternalServerError)
 		return
 	}
 
-	err = s.Repo.AddUserToOrganization(r.Context(), orgID, userID, "owner")
+	err = s.Repo.AddUserToOrganization(ctx, orgID, userID, "owner")
 	if err != nil {
 		http.Error(w, "failed to link user to organization", http.StatusInternalServerError)
 		return
@@ -307,6 +384,14 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	uUUID, _ := uuid.Parse(userID)
 	oUUID, _ := uuid.Parse(orgID)
 	token, _ := auth.GenerateToken(uUUID, oUUID)
+
+	// Audit log: User registration
+	auth.LogAction(ctx, s.Repo, "USER_REGISTER", map[string]interface{}{
+		"user_id": userID,
+		"email":    req.Email,
+		"org_id":   orgID,
+		"org_name": req.OrgName,
+	})
 
 	json.NewEncoder(w).Encode(map[string]string{
 		"token": token,
@@ -324,19 +409,45 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
+	
+	// Validate email format
+	if err := validation.ValidateEmail(req.Email); err != nil {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	
+	// Basic password validation (not empty)
+	if req.Password == "" {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
 
 	user, err := s.Repo.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
+		// Don't reveal if user exists or not
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
+	// Check if account is locked
+	ctx := r.Context()
+	if err := auth.CheckLockout(ctx, s.Repo, user.ID); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		// Record failed attempt
+		auth.RecordFailedAttempt(ctx, s.Repo, user.ID)
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
-	orgID, err := s.Repo.GetUserOrganization(r.Context(), user.ID.String())
+	// Clear failed attempts on successful login
+	auth.ClearFailedAttempts(ctx, s.Repo, user.ID)
+
+	orgID, err := s.Repo.GetUserOrganization(ctx, user.ID.String())
 	if err != nil {
 		http.Error(w, "no organization found for user", http.StatusForbidden)
 		return
@@ -344,6 +455,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	oUUID, _ := uuid.Parse(orgID)
 	token, _ := auth.GenerateToken(user.ID, oUUID)
+
+	// Audit log: Successful login
+	ctx = auth.WithRequest(ctx, r)
+	auth.LogAction(ctx, s.Repo, "USER_LOGIN_SUCCESS", map[string]interface{}{
+		"user_id": user.ID.String(),
+		"email":   req.Email,
+		"org_id":  orgID,
+	})
 
 	json.NewEncoder(w).Encode(map[string]string{
 		"token": token,

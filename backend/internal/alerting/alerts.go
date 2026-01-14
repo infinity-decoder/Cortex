@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/infinity-decoder/cortex-backend/internal/risk"
+	"cortex-backend/internal/risk"
 )
 
 // AlertHandler handles sending alerts via different channels

@@ -1,7 +1,7 @@
 package risk
 
 import (
-	"github.com/infinity-decoder/cortex-backend/internal/container"
+	"cortex-backend/internal/container"
 )
 
 type Severity string

@@ -222,14 +222,39 @@ if ($is_installed && !isset($_GET['reinstall'])) {
                 const result = await response.json();
 
                 if (result.success) {
+                    const adminPassword = result.data?.admin_password || 'Not generated';
+                    const adminEmail = result.data?.admin_email || '';
+                    
                     Swal.fire({
                         icon: 'success',
                         title: 'Installation Successful!',
-                        text: result.message,
+                        html: `
+                            <div style="text-align: left;">
+                                <p style="margin-bottom: 1rem;">${result.message}</p>
+                                <div style="background: rgba(59, 130, 246, 0.1); padding: 1rem; border-radius: 0.5rem; margin: 1rem 0;">
+                                    <p style="font-weight: bold; margin-bottom: 0.5rem; color: #3b82f6;">Admin Credentials:</p>
+                                    <p style="margin: 0.25rem 0;"><strong>Email:</strong> ${adminEmail}</p>
+                                    <p style="margin: 0.25rem 0;"><strong>Password:</strong> <code style="background: rgba(0,0,0,0.3); padding: 0.25rem 0.5rem; border-radius: 0.25rem;">${adminPassword}</code></p>
+                                    <button id="copyPassword" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Copy Password</button>
+                                </div>
+                                <p style="color: #ef4444; font-weight: bold; margin-top: 1rem;">⚠️ Save this password! You will need it to log in.</p>
+                            </div>
+                        `,
                         confirmButtonText: 'Launch Portal',
-                        confirmButtonColor: '#3b82f6'
+                        confirmButtonColor: '#3b82f6',
+                        width: '600px'
                     }).then(() => {
                         window.location.href = '../';
+                    });
+                    
+                    // Copy password functionality
+                    document.getElementById('copyPassword')?.addEventListener('click', function() {
+                        navigator.clipboard.writeText(adminPassword).then(() => {
+                            this.textContent = 'Copied!';
+                            setTimeout(() => {
+                                this.textContent = 'Copy Password';
+                            }, 2000);
+                        });
                     });
                 } else {
                     Swal.fire({

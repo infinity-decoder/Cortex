@@ -2,10 +2,11 @@ package persistence
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/infinity-decoder/cortex-backend/pkg/db"
-	"github.com/infinity-decoder/cortex-backend/pkg/models"
+	"cortex-backend/pkg/db"
+	"cortex-backend/pkg/models"
 )
 
 type Repository struct {
@@ -120,6 +121,27 @@ func (r *Repository) GetLatestFindingsForDomain(ctx context.Context, domainID st
 func (r *Repository) GetVerifiedDomains(ctx context.Context, orgID string) ([]models.Domain, error) {
 	query := `SELECT id, org_id, root_domain, verified, verification_token, created_at FROM domains WHERE verified = true AND org_id = $1`
 	rows, err := r.DB.Pool.Query(ctx, query, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var domains []models.Domain
+	for rows.Next() {
+		var d models.Domain
+		err := rows.Scan(&d.ID, &d.OrgID, &d.RootDomain, &d.Verified, &d.VerificationToken, &d.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		domains = append(domains, d)
+	}
+	return domains, nil
+}
+
+// GetAllVerifiedDomains returns all verified domains across all organizations (for scheduler)
+func (r *Repository) GetAllVerifiedDomains(ctx context.Context) ([]models.Domain, error) {
+	query := `SELECT id, org_id, root_domain, verified, verification_token, created_at FROM domains WHERE verified = true`
+	rows, err := r.DB.Pool.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -338,4 +360,56 @@ func (r *Repository) GetOrgPlan(ctx context.Context, orgID string) (string, erro
 	query := `SELECT plan_tier FROM organizations WHERE id = $1`
 	err := r.DB.Pool.QueryRow(ctx, query, orgID).Scan(&plan)
 	return plan, err
+}
+
+// GetAccountLockoutStatus checks if an account is locked
+func (r *Repository) GetAccountLockoutStatus(ctx context.Context, userID string) (bool, *time.Time, error) {
+	var attempts int
+	var lockedUntil *time.Time
+	
+	query := `SELECT attempts, locked_until FROM failed_login_attempts WHERE user_id = $1`
+	err := r.DB.Pool.QueryRow(ctx, query, userID).Scan(&attempts, &lockedUntil)
+	if err != nil {
+		// No record means no lockout
+		return false, nil, nil
+	}
+	
+	// Check if lockout has expired
+	if lockedUntil != nil && time.Now().After(*lockedUntil) {
+		return false, nil, nil
+	}
+	
+	// Account is locked if attempts >= threshold
+	return attempts >= 5, lockedUntil, nil
+}
+
+// IncrementFailedAttempts increments failed login attempts
+func (r *Repository) IncrementFailedAttempts(ctx context.Context, userID string) (int, error) {
+	// Insert or update failed attempts
+	query := `
+		INSERT INTO failed_login_attempts (user_id, attempts, last_attempt)
+		VALUES ($1, 1, CURRENT_TIMESTAMP)
+		ON CONFLICT (user_id) 
+		DO UPDATE SET 
+			attempts = failed_login_attempts.attempts + 1,
+			last_attempt = CURRENT_TIMESTAMP
+		RETURNING attempts
+	`
+	var attempts int
+	err := r.DB.Pool.QueryRow(ctx, query, userID).Scan(&attempts)
+	return attempts, err
+}
+
+// LockAccount locks an account until the specified time
+func (r *Repository) LockAccount(ctx context.Context, userID string, lockedUntil time.Time) error {
+	query := `UPDATE failed_login_attempts SET locked_until = $1 WHERE user_id = $2`
+	_, err := r.DB.Pool.Exec(ctx, query, lockedUntil, userID)
+	return err
+}
+
+// ClearFailedAttempts clears failed login attempts and unlocks account
+func (r *Repository) ClearFailedAttempts(ctx context.Context, userID string) error {
+	query := `DELETE FROM failed_login_attempts WHERE user_id = $1`
+	_, err := r.DB.Pool.Exec(ctx, query, userID)
+	return err
 }

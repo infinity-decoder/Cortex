@@ -6,13 +6,13 @@ import (
 	"log"
 
 	"github.com/google/uuid"
-	"github.com/infinity-decoder/cortex-backend/internal/container"
-	"github.com/infinity-decoder/cortex-backend/internal/discovery"
-	"github.com/infinity-decoder/cortex-backend/internal/fingerprinting"
-	"github.com/infinity-decoder/cortex-backend/internal/persistence"
-	"github.com/infinity-decoder/cortex-backend/internal/risk"
-	"github.com/infinity-decoder/cortex-backend/internal/scanning"
-	"github.com/infinity-decoder/cortex-backend/pkg/models"
+	"cortex-backend/internal/container"
+	"cortex-backend/internal/discovery"
+	"cortex-backend/internal/fingerprinting"
+	"cortex-backend/internal/persistence"
+	"cortex-backend/internal/risk"
+	"cortex-backend/internal/scanning"
+	"cortex-backend/pkg/models"
 )
 
 type Orchestrator struct {

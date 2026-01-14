@@ -1,14 +1,43 @@
 package auth
 
 import (
+	"crypto/rand"
 	"errors"
+	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
-var jwtKey = []byte("cortex_secret_key_change_in_prod") // Should be in env
+var jwtKey []byte
+
+func init() {
+	jwtKeyStr := os.Getenv("JWT_SECRET_KEY")
+	if jwtKeyStr == "" {
+		// Generate random 32-byte key
+		jwtKey = make([]byte, 32)
+		if _, err := rand.Read(jwtKey); err != nil {
+			log.Fatalf("Failed to generate JWT secret key: %v", err)
+		}
+		log.Println("WARNING: JWT_SECRET_KEY not set, using random key (tokens will be invalid on restart)")
+	} else {
+		if len(jwtKeyStr) < 32 {
+			log.Fatalf("JWT_SECRET_KEY must be at least 32 characters long")
+		}
+		jwtKey = []byte(jwtKeyStr)
+	}
+}
+
+// ValidateJWTSecret validates that JWT secret is properly configured
+func ValidateJWTSecret() error {
+	if len(jwtKey) < 32 {
+		return fmt.Errorf("JWT secret key is too short (minimum 32 bytes)")
+	}
+	return nil
+}
 
 type Claims struct {
 	UserID uuid.UUID `json:"user_id"`

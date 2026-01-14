@@ -94,9 +94,18 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Failed Login Attempts (Account Lockout)
+CREATE TABLE IF NOT EXISTS failed_login_attempts (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    attempts INTEGER DEFAULT 0 NOT NULL,
+    locked_until TIMESTAMP WITH TIME ZONE,
+    last_attempt TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for Performance
 CREATE INDEX IF NOT EXISTS idx_domains_org_id ON domains(org_id);
 CREATE INDEX IF NOT EXISTS idx_assets_domain_id ON assets(domain_id);
 CREATE INDEX IF NOT EXISTS idx_services_asset_id ON services(asset_id);
 CREATE INDEX IF NOT EXISTS idx_findings_service_id ON findings(service_id);
 CREATE INDEX IF NOT EXISTS idx_scan_runs_domain_id ON scan_runs(domain_id);
+CREATE INDEX IF NOT EXISTS idx_failed_login_attempts_user_id ON failed_login_attempts(user_id);
