@@ -19,22 +19,23 @@ export default function Login() {
         setError('');
 
         try {
-            const res = await fetch('http://localhost:8080/api/v1/auth/login', {
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+            const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             });
 
             if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Invalid credentials');
+                const errorData = await res.json().catch(() => ({ message: 'Invalid credentials' }));
+                throw new Error(errorData.message || errorData.error || 'Invalid credentials');
             }
 
             const data = await res.json();
             localStorage.setItem('token', data.token);
             router.push('/dashboard');
         } catch (err: any) {
-            setError(err.message);
+            setError(err.message || 'Login failed. Please try again.');
         } finally {
             setLoading(false);
         }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
+import DomainVerificationModal from '@/components/DomainVerificationModal';
 import {
   ShieldAlert,
   Globe,
@@ -21,6 +22,9 @@ export default function Dashboard() {
   const [findings, setFindings] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [verifiedDomains, setVerifiedDomains] = useState<any[]>([]);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [domainToVerify, setDomainToVerify] = useState<{domain: string; token: string} | null>(null);
+  const [allDomains, setAllDomains] = useState<any[]>([]); // Includes unverified domains
 
   const router = useRouter();
 
@@ -50,15 +54,19 @@ export default function Dashboard() {
     };
   };
 
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
   const fetchDomains = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/v1/domains', { headers: getHeaders() });
+      const res = await fetch(`${API_BASE}/api/v1/domains`, { headers: getHeaders() });
       if (res.ok) {
         const data = await res.json();
         setVerifiedDomains(data || []);
-        // Auto-select first domain if available
-        if (data && data.length > 0) {
-          setSelectedDomain(data[0].RootDomain);
+        setAllDomains(data || []);
+        // Auto-select first verified domain if available
+        const verified = (data || []).filter((d: any) => d.verified || d.Verified);
+        if (verified.length > 0) {
+          setSelectedDomain(verified[0].rootDomain || verified[0].RootDomain);
         }
       }
     } catch (e) {
@@ -66,12 +74,28 @@ export default function Dashboard() {
     }
   };
 
+  const fetchAllDomains = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/domains/all`, { headers: getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setAllDomains(data || []);
+      }
+    } catch (e) {
+      // Fallback to verified domains if endpoint doesn't exist
+      fetchDomains();
+    }
+  };
+
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/v1/stats', {
+      const res = await fetch(`${API_BASE}/api/v1/stats`, {
         headers: getHeaders()
       });
-      if (!res.ok) throw new Error('API Error');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Failed to fetch stats' }));
+        throw new Error(errorData.message || 'API Error');
+      }
       const data = await res.json();
       setStats(data);
     } catch (e) {
@@ -82,10 +106,13 @@ export default function Dashboard() {
   const fetchAssets = async () => {
     if (!selectedDomain) return;
     try {
-      const res = await fetch(`http://localhost:8080/api/v1/assets?domain=${selectedDomain}`, {
+      const res = await fetch(`${API_BASE}/api/v1/assets?domain=${selectedDomain}`, {
         headers: getHeaders()
       });
-      if (!res.ok) throw new Error('API Error');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Failed to fetch assets' }));
+        throw new Error(errorData.message || 'API Error');
+      }
       const data = await res.json();
       setAssets(data.slice(0, 4));
     } catch (e) {
@@ -96,14 +123,180 @@ export default function Dashboard() {
   const fetchFindings = async () => {
     if (!selectedDomain) return;
     try {
-      const res = await fetch(`http://localhost:8080/api/v1/findings?domain=${selectedDomain}`, {
+      const res = await fetch(`${API_BASE}/api/v1/findings?domain=${selectedDomain}`, {
         headers: getHeaders()
       });
-      if (!res.ok) throw new Error('API Error');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Failed to fetch findings' }));
+        throw new Error(errorData.message || 'API Error');
+      }
       const data = await res.json();
       setFindings(data.slice(0, 3));
     } catch (e) {
       setFindings([]);
+    }
+  };
+
+  const handleScan = async () => {
+    if (!domain || !domain.trim()) {
+      alert('Please enter a domain name');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scan`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ domain: domain.trim() })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Scan failed' }));
+        throw new Error(errorData.message || errorData.error || 'Scan failed');
+      }
+
+      const data = await res.json();
+      const jobId = data.jobId || data.job_id;
+      
+      if (!jobId) {
+        throw new Error('No job ID returned from scan request');
+      }
+
+      // Poll for scan status
+      await pollScanStatus(jobId);
+      
+      // Clear input
+      setDomain('');
+    } catch (e: any) {
+      alert(e.message || 'Failed to execute scan. Please try again.');
+      console.error('Scan error:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pollScanStatus = async (jobId: string) => {
+    const maxAttempts = 60; // 5 minutes max (5 second intervals)
+    let attempts = 0;
+
+    const poll = async (): Promise<void> => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/scans/status?jobId=${jobId}`, {
+          headers: getHeaders()
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to check scan status');
+        }
+
+        const data = await res.json();
+        const status = data.status;
+
+        if (status === 'completed') {
+          // Show success message
+          const result = data.result;
+          if (result) {
+            alert(`Scan completed successfully! Found ${result.assets?.length || 0} assets and ${result.allFindings?.length || 0} findings.`);
+          } else {
+            alert('Scan completed successfully!');
+          }
+          
+          // Refresh data
+          if (selectedDomain) {
+            await Promise.all([fetchStats(), fetchAssets(), fetchFindings()]);
+          }
+          return;
+        } else if (status === 'failed') {
+          throw new Error(data.error || 'Scan failed');
+        } else if (status === 'running' || status === 'pending') {
+          // Continue polling
+          attempts++;
+          if (attempts >= maxAttempts) {
+            throw new Error('Scan is taking longer than expected. Please check back later.');
+          }
+          setTimeout(poll, 5000); // Poll every 5 seconds
+        }
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Failed to check')) {
+          throw e;
+        }
+        // Retry on network errors
+        attempts++;
+        if (attempts >= maxAttempts) {
+          throw new Error('Unable to check scan status. Please refresh the page later.');
+        }
+        setTimeout(poll, 5000);
+      }
+    };
+
+    // Start polling after initial delay
+    setTimeout(poll, 2000);
+  };
+
+  const handleAddDomain = async () => {
+    if (!domain || !domain.trim()) {
+      alert('Please enter a domain name');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/domains`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ domain: domain.trim() })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Failed to add domain' }));
+        throw new Error(errorData.message || errorData.error || 'Failed to add domain');
+      }
+
+      const data = await res.json();
+      
+      // Refresh domains list
+      await fetchAllDomains();
+      
+      // Show verification modal
+      const token = data.verificationToken || data.verification_token;
+      if (token) {
+        setDomainToVerify({ domain: domain.trim(), token });
+        setShowVerificationModal(true);
+      } else {
+        alert('Domain added successfully!');
+      }
+      
+      // Clear input
+      setDomain('');
+    } catch (e: any) {
+      alert(e.message || 'Failed to add domain. Please try again.');
+      console.error('Add domain error:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyDomain = async () => {
+    if (!domainToVerify) return;
+    
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/domains/verify`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ domain: domainToVerify.domain })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Verification failed' }));
+        throw new Error(errorData.message || 'Verification failed');
+      }
+
+      // Refresh domains after successful verification
+      await fetchAllDomains();
+      await fetchDomains();
+    } catch (err: any) {
+      throw err; // Re-throw to be handled by modal
     }
   };
 
@@ -127,7 +320,7 @@ export default function Dashboard() {
                 onChange={(e) => setSelectedDomain(e.target.value)}
               >
                 {verifiedDomains.map((d: any) => (
-                  <option key={d.ID} value={d.RootDomain}>{d.RootDomain}</option>
+                  <option key={d.id || d.ID} value={d.rootDomain || d.RootDomain}>{d.rootDomain || d.RootDomain}</option>
                 ))}
               </select>
             )}
@@ -157,8 +350,12 @@ export default function Dashboard() {
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
               />
-              <button className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-500 transition-all">
-                Add Domain
+              <button 
+                onClick={handleAddDomain}
+                disabled={loading || !domain || !domain.trim()}
+                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-500 disabled:bg-slate-800 disabled:cursor-not-allowed transition-all"
+              >
+                {loading ? 'Adding...' : 'Add Domain'}
               </button>
             </div>
           </div>
@@ -171,7 +368,7 @@ export default function Dashboard() {
                   <Globe size={64} />
                 </div>
                 <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1">Total Assets</div>
-                <div className="text-3xl font-extrabold text-white mb-2">{stats?.total_assets || 0}</div>
+                <div className="text-3xl font-extrabold text-white mb-2">{stats?.totalAssets || stats?.total_assets || 0}</div>
                 <div className="flex items-center gap-1.5 text-green-500 text-xs font-bold">
                   <ArrowUpRight size={14} />
                   <span>Live</span>
@@ -183,7 +380,7 @@ export default function Dashboard() {
                   <Zap size={64} />
                 </div>
                 <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-1">Exposed Services</div>
-                <div className="text-3xl font-extrabold text-white mb-2">{stats?.scans_completed || 0}</div>
+                <div className="text-3xl font-extrabold text-white mb-2">{stats?.scansCompleted || stats?.scans_completed || 0}</div>
                 <div className="flex items-center gap-1.5 text-orange-500 text-xs font-bold">
                   <Activity size={14} className="animate-pulse" />
                   <span>Active Endpoints</span>
@@ -195,7 +392,7 @@ export default function Dashboard() {
                   <ShieldAlert size={64} className="text-red-500" />
                 </div>
                 <div className="text-[10px] font-extrabold text-red-500/50 uppercase tracking-widest mb-1">Critical Risks</div>
-                <div className="text-3xl font-extrabold text-red-500 mb-2">{stats?.critical_risks || 0}</div>
+                <div className="text-3xl font-extrabold text-red-500 mb-2">{stats?.criticalRisks || stats?.critical_risks || 0}</div>
                 <div className="flex items-center gap-1.5 text-red-400 text-xs font-bold">
                   <span>Attention Required</span>
                 </div>
@@ -229,8 +426,9 @@ export default function Dashboard() {
                         onChange={(e) => setDomain(e.target.value)}
                       />
                       <button
-                        disabled={loading || !domain}
-                        className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2"
+                        onClick={handleScan}
+                        disabled={loading || !domain || !domain.trim()}
+                        className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2"
                       >
                         {loading ? 'Analyzing...' : 'Execute Scan'}
                       </button>
@@ -253,8 +451,8 @@ export default function Dashboard() {
                         <div className="flex items-center gap-3">
                           <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></div>
                           <div>
-                            <div className="text-sm font-bold text-white font-mono">{asset.Subdomain || '@'}</div>
-                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">{asset.IpAddress || 'Unresolved'}</div>
+                            <div className="text-sm font-bold text-white font-mono">{asset.subdomain || asset.Subdomain || '@'}</div>
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">{asset.ipAddress || asset.IpAddress || 'Unresolved'}</div>
                           </div>
                         </div>
                         <ArrowUpRight size={14} className="text-slate-600 group-hover:text-white transition-colors" />
@@ -276,14 +474,14 @@ export default function Dashboard() {
                     {findings.length > 0 ? findings.map((finding, i) => (
                       <div key={i} className="flex gap-4 relative">
                         <div className="flex flex-col items-center">
-                          <div className={`w-3 h-3 rounded-full ${(finding.Severity || finding.severity) === 'critical' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
-                            (finding.Severity || finding.severity) === 'high' ? 'bg-orange-500' : 'bg-blue-500'
+                          <div className={`w-3 h-3 rounded-full ${(finding.severity || finding.Severity) === 'critical' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
+                            (finding.severity || finding.Severity) === 'high' ? 'bg-orange-500' : 'bg-blue-500'
                             }`}></div>
                           {i < findings.length - 1 && <div className="w-px flex-1 bg-slate-800 my-2"></div>}
                         </div>
                         <div className="-mt-1 pb-4">
-                          <div className="text-sm font-bold text-white leading-tight">{finding.Type || finding.title}</div>
-                          <div className="text-[10px] text-slate-600 font-medium mt-1 uppercase tracking-wider">{finding.Detected || 'Just now'}</div>
+                          <div className="text-sm font-bold text-white leading-tight">{finding.type || finding.Type || finding.title}</div>
+                          <div className="text-[10px] text-slate-600 font-medium mt-1 uppercase tracking-wider">{finding.lastSeen || finding.Detected || 'Just now'}</div>
                         </div>
                       </div>
                     )) : (
@@ -308,6 +506,20 @@ export default function Dashboard() {
           </>
         )}
       </div>
+
+      {/* Domain Verification Modal */}
+      {showVerificationModal && domainToVerify && (
+        <DomainVerificationModal
+          isOpen={showVerificationModal}
+          onClose={() => {
+            setShowVerificationModal(false);
+            setDomainToVerify(null);
+          }}
+          domain={domainToVerify.domain}
+          verificationToken={domainToVerify.token}
+          onVerify={handleVerifyDomain}
+        />
+      )}
     </DashboardLayout>
   );
 }

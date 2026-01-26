@@ -29,7 +29,8 @@ export default function Register() {
         setError('');
 
         try {
-            const res = await fetch('http://localhost:8080/api/v1/auth/register', {
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+            const res = await fetch(`${API_BASE}/api/v1/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -41,15 +42,15 @@ export default function Register() {
             });
 
             if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Registration failed');
+                const errorData = await res.json().catch(() => ({ message: 'Registration failed' }));
+                throw new Error(errorData.message || errorData.error || 'Registration failed');
             }
 
             const data = await res.json();
             localStorage.setItem('token', data.token);
             router.push('/dashboard');
         } catch (err: any) {
-            setError(err.message);
+            setError(err.message || 'Registration failed. Please try again.');
         } finally {
             setLoading(false);
         }

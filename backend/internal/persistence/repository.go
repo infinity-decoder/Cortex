@@ -138,6 +138,27 @@ func (r *Repository) GetVerifiedDomains(ctx context.Context, orgID string) ([]mo
 	return domains, nil
 }
 
+// GetAllDomainsByOrg returns all domains (verified and unverified) for a specific org
+func (r *Repository) GetAllDomainsByOrg(ctx context.Context, orgID string) ([]models.Domain, error) {
+	query := `SELECT id, org_id, root_domain, verified, verification_token, created_at FROM domains WHERE org_id = $1 ORDER BY created_at DESC`
+	rows, err := r.DB.Pool.Query(ctx, query, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var domains []models.Domain
+	for rows.Next() {
+		var d models.Domain
+		err := rows.Scan(&d.ID, &d.OrgID, &d.RootDomain, &d.Verified, &d.VerificationToken, &d.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		domains = append(domains, d)
+	}
+	return domains, nil
+}
+
 // GetAllVerifiedDomains returns all verified domains across all organizations (for scheduler)
 func (r *Repository) GetAllVerifiedDomains(ctx context.Context) ([]models.Domain, error) {
 	query := `SELECT id, org_id, root_domain, verified, verification_token, created_at FROM domains WHERE verified = true`

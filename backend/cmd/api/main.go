@@ -18,6 +18,7 @@ import (
 	"cortex-backend/internal/ratelimit"
 	httpsmiddleware "cortex-backend/internal/middleware"
 	"cortex-backend/internal/persistence"
+	"cortex-backend/internal/queue"
 	"cortex-backend/internal/scanner"
 	"cortex-backend/internal/scheduler"
 	"cortex-backend/pkg/db"
@@ -42,9 +43,15 @@ func main() {
 	// Initialize Dependencies
 	repo := persistence.NewRepository(database)
 	orch := scanner.NewOrchestrator(repo)
-	srv := &Server{Repo: repo, Orchestrator: orch}
+	jobQueue := queue.GetQueue()
+	
+	// Start scan worker
+	worker := queue.NewWorker(jobQueue, orch)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go worker.Start(ctx)
+	
+	srv := &Server{Repo: repo, Orchestrator: orch, Queue: jobQueue}
 
 	// Initialize & Start Scheduler
 	schedule := scheduler.NewScheduler(repo, orch, 24*time.Hour)
@@ -112,12 +119,15 @@ func main() {
 			// Scan endpoint with moderate rate limiting
 			scanLimiter := ratelimit.NewPerIPRateLimiter(10.0, 20) // 10 req/sec, burst of 20
 			r.With(scanLimiter.Limit).Post("/scan", srv.handleScan)
+			r.Post("/domains", srv.handleCreateDomain)
 			r.Post("/domains/verify", srv.handleVerify)
 			r.Get("/stats", srv.handleStats)
 			r.Get("/assets", srv.handleGetAssets)
 			r.Get("/services", srv.handleGetServices)
 			r.Get("/findings", srv.handleGetFindings)
 			r.Get("/domains", srv.handleGetDomains)
+			r.Get("/domains/all", srv.handleGetAllDomains)
+			r.Get("/scans/status", srv.handleGetScanStatus)
 
 			// Billing Routes
 			r.Get("/billing/plan", srv.handleGetPlan)

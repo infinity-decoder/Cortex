@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
+	"strings"
 
 	"github.com/google/uuid"
+	"cortex-backend/internal/alerting"
 	"cortex-backend/internal/container"
 	"cortex-backend/internal/discovery"
 	"cortex-backend/internal/fingerprinting"
@@ -16,11 +19,15 @@ import (
 )
 
 type Orchestrator struct {
-	Repo *persistence.Repository
+	Repo         *persistence.Repository
+	AlertHandler *alerting.AlertHandler
 }
 
 func NewOrchestrator(repo *persistence.Repository) *Orchestrator {
-	return &Orchestrator{Repo: repo}
+	return &Orchestrator{
+		Repo:         repo,
+		AlertHandler: alerting.NewAlertHandler(),
+	}
 }
 
 type ScanResult struct {
@@ -59,10 +66,36 @@ func (o *Orchestrator) RunScan(ctx context.Context, domainName string, domainID 
 		prevMap[key] = true
 	}
 
-	// 1. Discovery (Active + Passive)
+	// 1. Discovery (Active + Passive + TLS Certificate Analysis)
 	dnsScanner := discovery.NewScanner()
 	activeAssets, _ := dnsScanner.EnumerateSubdomains(ctx, domainName)
 	passiveAssets, _ := dnsScanner.PassiveDiscovery(ctx, domainName)
+	
+	// TLS Certificate Analysis - Extract SANs
+	tlsSANs, err := discovery.ExtractSANs(domainName)
+	if err == nil && len(tlsSANs) > 0 {
+		log.Printf("[Discovery] Found %d SANs from TLS certificate", len(tlsSANs))
+		// Convert SANs to discovery results by resolving to IPs
+		for _, san := range tlsSANs {
+			// Skip if it's the root domain (already discovered)
+			if san == domainName {
+				continue
+			}
+			// Resolve SAN to IPs using net.LookupHost
+			ips, err := net.LookupHost(san)
+			if err == nil && len(ips) > 0 {
+				// Extract subdomain from SAN
+				subdomain := san
+				if strings.HasSuffix(san, "."+domainName) {
+					subdomain = strings.TrimSuffix(san, "."+domainName)
+				}
+				passiveAssets = append(passiveAssets, discovery.Result{
+					Subdomain: subdomain,
+					IPs:       ips,
+				})
+			}
+		}
+	}
 	
 	// Merge assets
 	assetMap := make(map[string]discovery.Result)
@@ -141,6 +174,9 @@ func (o *Orchestrator) RunScan(ctx context.Context, domainName string, domainID 
 					Severity:    risk.Severity(advSev),
 					Description: advDesc,
 					Remediation: exposure.Remediation, // Fallback to basic remediation
+					AssetIP:     ip,
+					Port:        p.Port,
+					Technology:  string(tech),
 				}
 				// Specific remediation for advanced probes
 				if advTitle == "Kubernetes Kubelet API Anonymous Access" {
@@ -148,6 +184,11 @@ func (o *Orchestrator) RunScan(ctx context.Context, domainName string, domainID 
 				} else if advTitle == "Exposed Docker Remote API (Unauthenticated)" {
 					exposure.Remediation = "Disable TCP access to the Docker API or enforce MTLS authentication using certificates."
 				}
+			} else {
+				// Add asset context to basic exposure
+				exposure.AssetIP = ip
+				exposure.Port = p.Port
+				exposure.Technology = string(tech)
 			}
 
 			if exposure.Severity != risk.Info {
@@ -170,12 +211,19 @@ func (o *Orchestrator) RunScan(ctx context.Context, domainName string, domainID 
 		}
 	}
 
-	// 3. Advanced Attack Path Mapping (Logic for Phase 3)
-	// Example: If we have an exposed Kubernetes API AND a sensitive database, chain them.
-	// This is a simplified implementation for demonstration.
+	// 3. Advanced Attack Path Mapping
 	if len(allFindings) > 1 {
 		log.Printf("[AttackPath] Analyzing chains for %d findings...", len(allFindings))
-		// Chaining logic would go here
+		attackPaths := risk.AnalyzeAttackPaths(allFindings)
+		if len(attackPaths) > 0 {
+			log.Printf("[AttackPath] Identified %d attack paths", len(attackPaths))
+			for _, path := range attackPaths {
+				log.Printf("[AttackPath] Path: %s (Risk: %s, Score: %d) - %s", 
+					path.ID, path.CombinedRisk, path.Score, path.Description)
+			}
+			// Store attack paths (for future: add to database)
+			// For now, we log them and could add them to scan result metadata
+		}
 	}
 
 	o.Repo.UpdateScanRunStatus(ctx, runID, "completed")
@@ -185,6 +233,13 @@ func (o *Orchestrator) RunScan(ctx context.Context, domainName string, domainID 
 		Action: "SCAN_COMPLETE",
 		Metadata: fmt.Sprintf(`{"domain": "%s", "findings": %d}`, domainName, len(allFindings)),
 	})
+
+	// Send alerts for new critical/high findings
+	if len(newFindings) > 0 {
+		if err := o.AlertHandler.SendAlert(domainName, newFindings); err != nil {
+			log.Printf("[Alert] Failed to send alert: %v", err)
+		}
+	}
 
 	return &ScanResult{
 		Assets:      assets,
